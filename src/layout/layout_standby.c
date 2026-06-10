@@ -42,6 +42,7 @@ typedef enum
 	MESSAGE_MODULE,
 	MOTION_MODULE,
 	OUTDOOR1_LOCK_MODULE,
+	OUTDOOR1_GATE_MODULE,
 	OUTDOOR2_LOCK_MODULE,
 	SHORTCUT_TOTAL,
 } standby_shortcut;
@@ -74,6 +75,8 @@ static rom_bin_info info1_motion = rom_bin_info_get(ROM_RES_STANDY_MOTION_FOCUS_
 
 static rom_bin_info info_lock = rom_bin_info_get(ROM_RES_MONITOR_LOCK_UNFOCUS_PNG);
 static rom_bin_info info1_lock = rom_bin_info_get(ROM_RES_MONITOR_LOCK_FOCUS_PNG);
+static rom_bin_info info_gate = rom_bin_info_get(ROM_RES_MONITOR_INDOOR_LOCK_UNFOCUS_PNG);
+static rom_bin_info info1_gate = rom_bin_info_get(ROM_RES_MONITOR_INDOOR_LOCK_FOCUS_PNG);
 static rom_bin_info info_gate1 = rom_bin_info_get(ROM_RES_STANDY_INDOOR_LOCK_UNFOCUS_PNG);
 static rom_bin_info info1_gate1 = rom_bin_info_get(ROM_RES_STANDY_INDOOR_LOCK_FOCUS_PNG);
 
@@ -648,7 +651,7 @@ void weather_anim_deleted_cb(struct _lv_obj_t *obj, lv_event_t event)
 
 void standby_weather_widgets_up(lv_obj_t *obj /* ,lv_event_t event */)
 {
-	goto_layout(pLAYOUT(home));
+	goto_layout(pLAYOUT(standby));
 }
 
 void standby_weather_widgets_create(void)
@@ -1202,6 +1205,26 @@ static void standby_Lock_1_task(lv_task_t *task_t)
 	}
 }
 
+static lv_task_t *gate_1_task_t = NULL;
+static void standby_gate_task(lv_task_t *task_t)
+{
+	printf("%s =================>>%d\n\r", __func__, __LINE__);
+	lv_obj_t *btn = ((lv_obj_t *)(task_t->user_data));
+	// lv_obj_t* btn = lv_obj_get_child_form_id(obj,OUTDOOR1_GATE_MODULE);
+	// static rom_bin_info info = rom_bin_info_get(ROM_RES_MONITOR_INDOOR_LOCK_UNFOCUS_PNG);
+
+	lv_imgbtn_set_src(btn, LV_BTN_STATE_RELEASED, &info_gate);
+	lv_imgbtn_set_src(btn, LV_BTN_STATE_PRESSED, &info_gate);
+
+	tuya_door_lock_report(TUYA_DOOR_LOCK2, false);
+
+	if (gate_1_task_t)
+	{
+		lv_task_del(gate_1_task_t);
+		gate_1_task_t = NULL;
+	}
+}
+
 static void standy_menu_btn_up(lv_obj_t *obj)
 {
 	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2) || tuya_monitor_state_get()) // 正在视频对讲其他机子无法操作
@@ -1267,6 +1290,28 @@ static void standy_menu_btn_up(lv_obj_t *obj)
 			// 	open_door_ring_play(80);
 		}
 		break;
+
+	case OUTDOOR1_GATE_MODULE:
+		if (gate_1_task_t == NULL)
+		{
+			audio_play_stop_set();
+
+			static rom_bin_info info = rom_bin_info_get(ROM_RES_MONITOR_INDOOR_UNLOCK_UNFOCUS_PNG);
+			lv_imgbtn_set_src(obj, LV_BTN_STATE_RELEASED, &info);
+			lv_imgbtn_set_src(obj, LV_BTN_STATE_PRESSED, &info);
+			// 开锁
+			network_cmd_data data;
+			data.device = DEVICE_OUTDOOR_1;
+			data.cmd = NET_COMMON_CMD_UNLOCK;
+			data.arg1 = user_data_get()->door1.ungate1_delay;
+			data.arg2 = 2 | user_data_get()->language.index << 2 | user_data_get()->other.unlock_hint << 7;
+			network_send_cmd_data(&data);
+			tuya_door_lock_report(TUYA_DOOR_LOCK2, true);
+
+			gate_1_task_t = lv_task_create(standby_gate_task, user_data_get()->door1.ungate1_delay * 1000, LV_TASK_PRIO_HIGH, obj);
+		}
+		break;
+
 	case OUTDOOR2_LOCK_MODULE:
 		if (lock_2_task_lock_flag == 0)
 		{
@@ -1459,6 +1504,11 @@ static lv_obj_t *MOTION_MODULE_CREATE(user_obj *obj)
 static lv_obj_t *OUTDOOR1_LOCK_MODULE_CREATE(user_obj *obj)
 {
 	return standy_shortcut_btn_create(obj, FILE_TYPE_NONE, &info_lock, &info1_lock);
+}
+
+static lv_obj_t *OUTDOOR1_GATE_MODULE_CREATE(user_obj *obj)
+{
+	return standy_shortcut_btn_create(obj, FILE_TYPE_NONE, &info_gate, &info1_gate);
 }
 
 static lv_obj_t *OUTDOOR2_LOCK_MODULE_CREATE(user_obj *obj)
@@ -1710,7 +1760,7 @@ static void motion_2_head_create(void)
 	lv_obj_set_pos(cont, 0, 0);
 	lv_obj_set_size(cont, 1024, 60);
 	lv_obj_set_style_local_bg_opa(cont, LV_LINE_PART_MAIN, LV_STATE_DEFAULT, LV_OPA_50);
-	lv_obj_set_style_local_bg_color(cont, LV_LINE_PART_MAIN, LV_STATE_DEFAULT, lv_color_make(0xFF, 0xFF, 0xFF));
+	lv_obj_set_style_local_bg_color(cont, LV_LINE_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x8C8C8C));
 	lv_obj_set_auto_realign(cont, true);
 
 	motion_channel_label = lv_label_create(cont, NULL);
@@ -2012,6 +2062,7 @@ USER_OBJ_INIT(STORTCAT_OBJ, SHORTCUT_TOTAL){
 	[MOTION_MODULE] = {.area = {0, 15, SHORTCUT_KEY_WIDTH, SHORTCUT_KEY_WIDTH}, .parent = &USER_OBJ_GET(STORTCAT_OBJ, SHORTCUT_CONT), USER_OBJ_CONSTRUCTOR(MOTION_MODULE)},
 
 	[OUTDOOR1_LOCK_MODULE] = {.area = {0, 15, SHORTCUT_KEY_WIDTH, SHORTCUT_KEY_WIDTH}, .parent = &USER_OBJ_GET(STORTCAT_OBJ, SHORTCUT_CONT), USER_OBJ_CONSTRUCTOR(OUTDOOR1_LOCK_MODULE)},
+	[OUTDOOR1_GATE_MODULE] = {.area = {0, 15, SHORTCUT_KEY_WIDTH, SHORTCUT_KEY_WIDTH}, .parent = &USER_OBJ_GET(STORTCAT_OBJ, SHORTCUT_CONT), USER_OBJ_CONSTRUCTOR(OUTDOOR1_GATE_MODULE)},
 	[OUTDOOR2_LOCK_MODULE] = {.area = {0, 15, SHORTCUT_KEY_WIDTH, SHORTCUT_KEY_WIDTH}, .parent = &USER_OBJ_GET(STORTCAT_OBJ, SHORTCUT_CONT), USER_OBJ_CONSTRUCTOR(OUTDOOR2_LOCK_MODULE)},
 
 };
@@ -2172,6 +2223,11 @@ static void LAYOUT_QUIT_FUNC(standby)
 	{
 		lv_task_del(unlock_1_task_t);
 		unlock_1_task_t = NULL;
+	}
+	if (gate_1_task_t)
+	{
+		lv_task_del(gate_1_task_t);
+		gate_1_task_t = NULL;
 	}
 	if (unlock_2_task_t)
 	{

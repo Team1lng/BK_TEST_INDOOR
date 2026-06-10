@@ -290,12 +290,17 @@ static void media_photo_info_label_display(void)
 		lv_obj_t *label_channel = lv_obj_get_child_form_id(parent, 0);
 		if (label_channel != NULL)
 		{
-			lv_label_set_text(label_channel, info->ch == MON_CH_DOOR_1 ? text_str(STR_DOOR1) : info->ch == MON_CH_DOOR_2 ? text_str(STR_DOOR2)
-																						   : info->ch == MON_CH_CCTV_1	 ? text_str(STR_CAMERA1)
-																														 : text_str(STR_CAMERA2));
+			const char *str = info->ch == MON_CH_DOOR_1 ? text_str(STR_DOOR1) : info->ch == MON_CH_DOOR_2 ? text_str(STR_DOOR2)
+																			: info->ch == MON_CH_CCTV_1	  ? text_str(STR_CAMERA1)
+																										  : text_str(STR_CAMERA2);
+			lv_label_set_text(label_channel, str);
+			lv_label_set_text(lv_obj_get_child_form_id(parent, 1), str);
+			lv_label_set_text(lv_obj_get_child_form_id(parent, 2), str);
+			lv_label_set_text(lv_obj_get_child_form_id(parent, 3), str);
+			lv_label_set_text(lv_obj_get_child_form_id(parent, 4), str);
 		}
 
-		lv_obj_t *label_time = lv_obj_get_child_form_id(parent, 1);
+		lv_obj_t *label_time = lv_obj_get_child_form_id(parent, 5);
 		if (label_time != NULL)
 		{
 			char str[128] = {"0"};
@@ -313,6 +318,10 @@ static void media_photo_info_label_display(void)
 			str[17] = ':';
 			strncat(&str[18], &info->file_name[13], 2);
 			lv_label_set_text(label_time, str);
+			lv_label_set_text(lv_obj_get_child_form_id(parent, 6), str);
+			lv_label_set_text(lv_obj_get_child_form_id(parent, 7), str);
+			lv_label_set_text(lv_obj_get_child_form_id(parent, 8), str);
+			lv_label_set_text(lv_obj_get_child_form_id(parent, 9), str);
 		}
 	}
 }
@@ -323,15 +332,62 @@ static void media_photo_info_label_create(void)
 	lv_obj_set_id(obj, 0);
 	lv_obj_set_pos(obj, 38, 500);
 	lv_obj_set_size(obj, 400, 70);
-
-	lv_obj_t *label_channel = lv_label_create(obj, NULL);
+	// 由于lvgl7.11不支持文本轮廓，此处使用文本向四个方向偏移1个像素重叠实现
+	lv_obj_t *label_channel = NULL;
+	// 上
+	label_channel = lv_label_create(obj, NULL);
 	lv_obj_set_id(label_channel, 0);
-	lv_obj_t *label_time = lv_label_create(obj, NULL);
-	lv_obj_set_id(label_time, 1);
-	media_photo_info_label_display();
-
+	lv_obj_set_style_local_text_color(label_channel, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x000000));
+	lv_obj_align(label_channel, obj, LV_ALIGN_IN_TOP_LEFT, 0, 1);
+	// 下
+	label_channel = lv_label_create(obj, NULL);
+	lv_obj_set_id(label_channel, 1);
+	lv_obj_set_style_local_text_color(label_channel, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x000000));
+	lv_obj_align(label_channel, obj, LV_ALIGN_IN_TOP_LEFT, 0, -1);
+	// 左
+	label_channel = lv_label_create(obj, NULL);
+	lv_obj_set_id(label_channel, 2);
+	lv_obj_set_style_local_text_color(label_channel, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x000000));
+	lv_obj_align(label_channel, obj, LV_ALIGN_IN_TOP_LEFT, -1, 0);
+	// 右
+	label_channel = lv_label_create(obj, NULL);
+	lv_obj_set_id(label_channel, 3);
+	lv_obj_set_style_local_text_color(label_channel, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x000000));
+	lv_obj_align(label_channel, obj, LV_ALIGN_IN_TOP_LEFT, 1, 0);
+	// 中
+	label_channel = lv_label_create(obj, NULL);
+	lv_obj_set_id(label_channel, 4);
+	lv_obj_set_style_local_text_color(label_channel, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0xFFFFFF));
 	lv_obj_align(label_channel, obj, LV_ALIGN_IN_TOP_LEFT, 0, 0);
+
+	lv_obj_t *label_time = NULL;
+	// 上
+	label_time = lv_label_create(obj, NULL);
+	lv_obj_set_id(label_time, 5);
+	lv_obj_set_style_local_text_color(label_time, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x000000));
+	lv_obj_align(label_time, obj, LV_ALIGN_IN_BOTTOM_LEFT, 0, 1);
+	// 下
+	label_time = lv_label_create(obj, NULL);
+	lv_obj_set_id(label_time, 6);
+	lv_obj_set_style_local_text_color(label_time, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x000000));
+	lv_obj_align(label_time, obj, LV_ALIGN_IN_BOTTOM_LEFT, 0, -1);
+	// 左
+	label_time = lv_label_create(obj, NULL);
+	lv_obj_set_id(label_time, 7);
+	lv_obj_set_style_local_text_color(label_time, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x000000));
+	lv_obj_align(label_time, obj, LV_ALIGN_IN_BOTTOM_LEFT, -1, 0);
+	// 右
+	label_time = lv_label_create(obj, NULL);
+	lv_obj_set_id(label_time, 8);
+	lv_obj_set_style_local_text_color(label_time, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x000000));
+	lv_obj_align(label_time, obj, LV_ALIGN_IN_BOTTOM_LEFT, 1, 0);
+	// 中
+	label_time = lv_label_create(obj, NULL);
+	lv_obj_set_id(label_time, 9);
+	lv_obj_set_style_local_text_color(label_time, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0xFFFFFF));
 	lv_obj_align(label_time, obj, LV_ALIGN_IN_BOTTOM_LEFT, 0, 0);
+
+	media_photo_info_label_display();
 }
 
 // static void media_photo_lock_img_display(bool en)

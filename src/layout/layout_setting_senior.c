@@ -129,8 +129,20 @@ static void senior_set_msgbox_task(lv_task_t *task_t)
 	msgbox_task_t = NULL;
 	if (msgbox_type == 2)
 	{
+		const char *wifi_conf =	"ctrl_interface=/var/run/wpa_supplicant"
+								"\nupdate_config=1"
+								"\nnetwork={"
+								"\n\t	scan_ssid=1"
+								"\n\t	key_mgmt=WPA-PSK"
+								"\n\t	ssid=\"sat_leo_wifi\""
+								"\n\t	psk=\"leo666666\""
+								"\n}"
+								"\n";
+		FILE *fp = fopen(WPA_SUPPLICANT_PATH, "wb");
+		fwrite(wifi_conf, strlen(wifi_conf), 1, fp);
+		fclose(fp);
+		system("sync");
 		user_data_reset();
-
 		network_local_device_set(user_data_get()->other.network_device);
 		network_local_family_set(user_data_get()->other.family_id);
 		backlight_open(false, false, 0);

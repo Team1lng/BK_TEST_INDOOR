@@ -597,22 +597,32 @@ VOID TUYA_IPC_APP_rev_audio_cb(IN INT_T device, IN INT_T channel, IN CONST MEDIA
         return;
     }
     static char *alaw_buffer = NULL;
+    static short *pcm_buffer = NULL;
     static int read_size = 0;
-#define ALAW_BUFFER_MAX 512
+#define ALAW_BUFFER_MAX 1280
     if (alaw_buffer == NULL)
     {
-        alaw_buffer = malloc(ALAW_BUFFER_MAX);
+        alaw_buffer = (char *)malloc(ALAW_BUFFER_MAX);
         read_size = 0;
     }
-
+    if (pcm_buffer == NULL)
+    {
+        pcm_buffer = (short *)malloc(p_audio_frame->buf_len * 4);
+    }
     if (read_size + (p_audio_frame->buf_len / 2) > ALAW_BUFFER_MAX)
     {
         network_audio_send_package_push(0, alaw_buffer, read_size, false);
         read_size = 0;
     }
-    int encode_size = 0;
-    tuya_g711_encode(TUYA_G711_A_LAW, (short unsigned int *)p_audio_frame->p_audio_buf, p_audio_frame->buf_len, (unsigned char *)&alaw_buffer[read_size], (unsigned int *)&encode_size);
-    read_size += encode_size;
+    int codec_size = 0;
+    tuya_g711_decode(TUYA_G711_MU_LAW, (short unsigned int *)p_audio_frame->p_audio_buf, p_audio_frame->buf_len, pcm_buffer, (unsigned int *)&codec_size); // Alexa下发的格式是g711u，改了没作用，解码g711u
+    short *pcm_16bit_buffer = (short *)pcm_buffer;
+    for(int i = codec_size / 2 - 1; i >= 0; i--) // 8k -> 16k
+    {
+        pcm_16bit_buffer[i * 2] = pcm_16bit_buffer[i * 2 + 1] = pcm_16bit_buffer[i];
+    }
+    tuya_g711_encode(TUYA_G711_A_LAW, (short unsigned int *)pcm_buffer, codec_size * 2, (unsigned char *)&alaw_buffer[read_size], (unsigned int *)&codec_size); // 门口机传输的是g711a，16k采样率，编码g711a
+    read_size += codec_size;
     return;
 }
 
@@ -648,8 +658,8 @@ VOID TUYA_IPC_Media_Adapter_Init(TUYA_IPC_SDK_MEDIA_ADAPTER_S *p_media_adatper_i
     memcpy(&device_media_info.av_encode_info, &p_media_infos->media_info, sizeof(IPC_MEDIA_INFO_T));
 
     device_media_info.audio_decode_info.enable = 1;
-    device_media_info.audio_decode_info.audio_codec = TUYA_CODEC_AUDIO_PCM;
-    device_media_info.audio_decode_info.audio_sample = TUYA_AUDIO_SAMPLE_16K;
+    device_media_info.audio_decode_info.audio_codec = TUYA_CODEC_AUDIO_G711U;
+    device_media_info.audio_decode_info.audio_sample = TUYA_AUDIO_SAMPLE_8K;
     device_media_info.audio_decode_info.audio_databits = TUYA_AUDIO_DATABITS_16;
     device_media_info.audio_decode_info.audio_channel = TUYA_AUDIO_CHANNEL_MONO;
 

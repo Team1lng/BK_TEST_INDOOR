@@ -23,7 +23,7 @@
 #include "../include/anyka/ak_common.h"
 #include <stdatomic.h>
 #include "../layout/resource/rom.h"
-
+#include "ty_dp_define.h"
 #include "../api/network/network_common.h"
 
 /* ********************************************************************************************************************* */
@@ -325,6 +325,7 @@ int tuya_notify_call_event(int ch, const uint8_t *jpeg_buf, int size)
         return -1;
     }
     tuya_ipc_notify_door_bell_press(jpeg_buf, size, NOTIFICATION_CONTENT_JPEG);
+    tuya_ipc_dp_report(NULL, TUYA_DP_DOOR_BELL, PROP_STR, "tuya6", 1);
     tuya_ipc_notify_alarm(jpeg_buf, size, ch == 0 ? NOTIFICATION_NAME_PASSBY : NOTIFICATION_NAME_CAR, TRUE, NULL);
     return 0;
 }
@@ -418,7 +419,7 @@ static char tuya_network_online_check(const char *dev)
     read(fd, buffer, 2);
     close(fd);
 
-    if (strncmp(buffer, "up", 2))
+    if (strncmp(buffer, "down", 4) == 0)
     {
         return on_line;
     }

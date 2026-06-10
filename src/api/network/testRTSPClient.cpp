@@ -714,7 +714,7 @@ static void live555_rtsp_stream_insert(unsigned char *data, int len)
     //     return;
     // }
     unsigned char head[4] = {0x00, 0x00, 0x00, 0x01};
-    record_data_node node;
+    record_data_node node = {0};
     node.len = len + 4;
     node.is_video = true;
 

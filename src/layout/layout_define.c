@@ -1465,27 +1465,27 @@ void default_camera_status_callback(unsigned long arg1, unsigned long arg2)
 	int version2 = 0;
 	get_outdoor_model_version(DEVICE_OUTDOOR_1, &model1, &version1);
 	get_outdoor_model_version(DEVICE_OUTDOOR_2, &model2, &version2);
-	if (version1 != 0 || version2 != 0)
+	if ((model1 != OLD_OUTDOOR_MODEL && version1 != 0) || (model2 != OLD_OUTDOOR_MODEL && version2 != 0))
 	{
 		db_log_debug("model1:%d model2:%d version1:%d version2:%d\n", model1, model2, version1, version2);
-		if(version1 == 0) // door1离线，door2在线
+		if (version1 == 0) // door1离线，door2在线
 		{
 			version = version2;
 			model = model2;
 		}
-		else if(version2 == 0) // door1在线，door2离线
+		else if (version2 == 0) // door1在线，door2离线
 		{
 			version = version1;
 			model = model1;
 		}
 		else // 都在线
 		{
-			if(model1 != model2) // 型号不同不允许升级，不推送版本
+			if (model1 != model2) // 型号不同不允许升级，不推送版本
 			{
 				tuya_sub_version_report(0, NULL);
 				return;
 			}
-			if(version1 < version2) // 优先上报低版本
+			if (version1 < version2) // 优先上报低版本
 			{
 				version = version1;
 			}
@@ -2692,19 +2692,19 @@ void network_devices_enable_init(void)
 
 void tuya_channel_valid_report(void)
 {
-    tuya_ch_info_t info[MON_CH_TOTAL];
-    int ch = monitor_channel_get();
-    int count = 0;
-    memset(info, 0, sizeof(info));
+	tuya_ch_info_t info[MON_CH_TOTAL];
+	int ch = monitor_channel_get();
+	int count = 0;
+	memset(info, 0, sizeof(info));
 
-    for (int i = MON_CH_DOOR_1; i < MON_CH_TOTAL; i++)
-    {
-        if (monitor_valid_channel_check(i))
-        {
-            info[count].ch = i;
-            info[count].name = (ch == i ? text_str(STR_TUYA_CURR_DOOR1 + (i - MON_CH_DOOR_1) * 2) : text_str(STR_TUYA_CURR_DOOR1 + (i - MON_CH_DOOR_1) * 2 + 1));
-            count++;
-        }
-    }
-    tuya_channel_report(ch, info, count);
+	for (int i = MON_CH_DOOR_1; i < MON_CH_TOTAL; i++)
+	{
+		if (monitor_valid_channel_check(i))
+		{
+			info[count].ch = i;
+			info[count].name = (ch == i ? text_str(STR_TUYA_CURR_DOOR1 + (i - MON_CH_DOOR_1) * 2) : text_str(STR_TUYA_CURR_DOOR1 + (i - MON_CH_DOOR_1) * 2 + 1));
+			count++;
+		}
+	}
+	tuya_channel_report(ch, info, count);
 }

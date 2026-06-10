@@ -691,12 +691,15 @@ static void net_common_compile_time_func(net_common_pack_info info)
 	struct ak_timeval curr_time;
 	ak_get_ostime(&curr_time);
 	device_heart_info[device_family_id][info.send_device].heart_time = curr_time.sec;
-	int ver = (info.arg2 << 8) | info.arg1;
-	if(OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].ver != ver)
+	if(OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].model != OLD_OUTDOOR_MODEL)
 	{
-		printf("device:%d  version:%d\n", info.send_device, ver);
-		OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].ver = ver;
-		dev_info_status_event_push(1, 0);
+		int ver = (info.arg2 << 8) | info.arg1;
+		if(OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].ver != ver)
+		{
+			printf("new outdoor device:%d  version:%d\n", info.send_device, ver);
+			OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].ver = ver;
+			dev_info_status_event_push(1, 0);
+		}
 	}
 	// printf("%d.%d.%d \n",year,mon,day);
 }
@@ -759,7 +762,20 @@ static void net_common_stream_status_func(net_common_pack_info info)
 	// printf(PRINTF_GREEN"receive from outdoor[%d] heart packet ........\n\r"PRINTF_NONE,device == DEVICE_OUTDOOR_1 ? 1 : 2);
 	// fflush(stdout);
 	// printf("OUTDOOR VERSION: %d.%d \n",arg1 >> 4,arg2);
-	OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].model = info.arg2;
+	if(info.arg1 & 0xF0)
+	{
+		OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].model = OLD_OUTDOOR_MODEL;
+		int ver = (info.arg1 >> 4) * 100 + info.arg2;
+		if(OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].ver != ver)
+		{
+			printf("old outdoor device:%d  version:%d\n", info.send_device, ver);
+			OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].ver = ver;
+		}
+	}
+	else
+	{
+		OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].model = info.arg2;
+	}
 	OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].talk_busy = info.arg1 & 0x02;
 	OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].fingerprint_module = info.arg1 & 0x04;
 	if (OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].talk_busy)

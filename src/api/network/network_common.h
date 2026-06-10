@@ -96,6 +96,7 @@ typedef enum
 
 #define COMMON_CMD_LEN 8
 
+#define OLD_OUTDOOR_MODEL 0xFF
 /*
  *	arg1: 1:查询ID状态
  *

@@ -907,7 +907,7 @@ static void monitor_2_head_create(void)
 	lv_obj_set_pos(cont, 0, 0);
 	lv_obj_set_size(cont, 1024, 60);
 	lv_obj_set_style_local_bg_opa(cont, LV_LINE_PART_MAIN, LV_STATE_DEFAULT, LV_OPA_50);
-	lv_obj_set_style_local_bg_color(cont, LV_LINE_PART_MAIN, LV_STATE_DEFAULT, lv_color_make(0xFF, 0xFF, 0xFF));
+	lv_obj_set_style_local_bg_color(cont, LV_LINE_PART_MAIN, LV_STATE_DEFAULT, lv_color_hex(0x8C8C8C));
 	lv_obj_set_auto_realign(cont, true);
 
 	lv_obj_t *time_label = lv_label_create(cont, NULL);

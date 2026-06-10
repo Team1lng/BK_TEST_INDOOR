@@ -29,7 +29,7 @@ set(GVS_LOGO_NAME "gvs.rgb")
 set(HOMSECUR_LOGO_NAME "homsecur.rgb")
 set(TARGET_LOGO_NAME "anyka_logo.rgb")
 
-SET(IPS_SCREEN 10)
+SET(IPS_SCREEN 8)
 SET(CMAKE_APP_OID OFF)
 
 # add_definitions(-DDHCP_IPCAMERA)
@@ -42,7 +42,7 @@ if(CMAKE_FRENCH_ENABLE)
 	add_definitions(-DLANGUAGE_FRENCH_ENABLE)
 	add_definitions(-DIPC_APP_VERSION="2.1.8")
 else()
-	add_definitions(-DIPC_APP_VERSION="3.0.1")
+	add_definitions(-DIPC_APP_VERSION="3.0.3")
 endif()
 
 #定制PID
