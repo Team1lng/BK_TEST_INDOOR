@@ -1,4 +1,18 @@
-.vscode
-build
-五棵树-*
-SAT_ANYKAOS_*
+# 压缩包（防止超大文件违规）
+*.zip
+*.ZIP
+
+# 编译产物与二进制
+*.bin
+*.sqsh4
+*.a
+*.so
+CMakeFiles/
+build/
+output/
+*.dir/
+
+# 临时缓存文件
+*.cache
+*.depend
+*.o
