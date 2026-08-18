@@ -1,4 +1,5 @@
 #include "layout_define.h"
+#include "tuya_session_guard.h"
 #include "../api/queue/queue.h"
 #include "ak_thread.h"
 #include "user_data.h"
@@ -123,6 +124,23 @@ static event_pro_callback device_adc_key_callback = NULL;
 
 static const layout *cur_layout = NULL;
 static const layout *prev_layout = NULL;
+
+static tuya_session_target tuya_session_target_from_layout(const layout *layout)
+{
+	if (layout == &layout_home)
+	{
+		return TUYA_SESSION_TARGET_HOME;
+	}
+	if (layout == &layout_standby)
+	{
+		return TUYA_SESSION_TARGET_STANDBY;
+	}
+	if (layout == &layout_time_display)
+	{
+		return TUYA_SESSION_TARGET_TIME_DISPLAY;
+	}
+	return TUYA_SESSION_TARGET_OTHER;
+}
 
 static lv_task_t *lv_os_event_ptask = NULL;
 
@@ -877,11 +895,11 @@ bool tuya_uuid_file_read(void)
 // 	back_logo_task_t = lv_task_create(back_logo_task, 3000, LV_TASK_PRIO_HIGH, NULL);
 // }
 
-static void feed_watchdog_task(lv_task_t *t)
-{
-	extern void watch_dog_feed(void);
-	watch_dog_feed();
-}
+// static void feed_watchdog_task(lv_task_t *t)
+// {
+// 	extern void watch_dog_feed(void);
+// 	watch_dog_feed();
+// }
 
 void leo_api_init(void)
 {
@@ -1016,8 +1034,8 @@ void leo_api_init(void)
 	// extern void SD_card_space_clear(void);
 	// SD_card_space_clear();
 	extern void watchdog_open(void);
-	watchdog_open();
-	lv_task_ready(lv_task_create(feed_watchdog_task, 1000, LV_TASK_PRIO_HIGHEST, NULL));
+	// watchdog_open();
+	// lv_task_ready(lv_task_create(feed_watchdog_task, 1000, LV_TASK_PRIO_HIGHEST, NULL));
 	monitor_channel_set(MON_CH_NONE);
 	goto_layout(pLAYOUT(standby));
 }
@@ -1352,6 +1370,26 @@ void tuya_event_register(event_pro_callback handle)
 {
 
 	tuya_event_callback = handle;
+}
+
+/*
+ * 涂鸦监控期间允许室内机继续操作本地页面。
+ * 本地通话和门口机占用由各页面原有的独立状态判断处理。
+ */
+bool tuya_audio_occupied_check(void)
+{
+	return tuya_talk_active_get();
+}
+
+/*
+ * 检查室内机是否正在本地监控（手动/呼叫/移动侦测/报警）
+ * 返回 true 表示室内机正在使用视频资源，Tuya 不应抢占
+ */
+bool indoor_is_local_monitoring(void)
+{
+	MONITOR_ENTER_WAY way = monitor_enter_way_get();
+	return (way == MONITOR_ENTER_MANUAL || way == MONITOR_ENTER_CALL ||
+			way == MONITOR_ENTER_MONTION || way == MONITOR_ENTER_ALARM);
 }
 
 void network_event_register(event_pro_callback handle)
@@ -1786,7 +1824,8 @@ bool tuya_monitor_absent_mode_event(bool state)
 }
 bool tuya_monitor_enter_event(void)
 {
-	Debug("====tuya_monitor_enter_event=======>>>>tuya event");
+	Debug("[TUYA_UI_TRACE] enqueue monitor enter: enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
+		  monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
 	lv_event_info *node = lv_os_event_queue_node_new();
 	if (node == NULL)
 	{
@@ -1801,6 +1840,8 @@ bool tuya_monitor_enter_event(void)
 }
 bool tuya_monitor_quit_event(void)
 {
+	Debug("[TUYA_UI_TRACE] enqueue monitor quit: enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
+		  monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
 	lv_event_info *node = lv_os_event_queue_node_new();
 	if (node == NULL)
 	{
@@ -1963,10 +2004,11 @@ void wifi_icon_display(lv_obj_t *parent, int *icon_offset, unsigned long arg1, u
 void tuya_icon_display(lv_obj_t *parent, int *icon_offset, unsigned long arg1, unsigned long arg2)
 {
 	lv_obj_t *tuya_icon = NULL;
+	bool tuya_online = tuya_online_status_get();
+	bool network_connected = user_data_get()->wifi.wifi_connect_flag || user_data_get()->pairing_mode == WIRED_NET;
 	if ((tuya_icon = lv_obj_get_child_form_id(parent, 98)) == NULL)
 	{
-		Debug("tuya_online_status_get():%d\n", tuya_online_status_get());
-		if (tuya_online_status_get() == true && (user_data_get()->wifi.wifi_connect_flag || user_data_get()->pairing_mode == WIRED_NET))
+		if (tuya_online && network_connected)
 		{
 			tuya_icon = lv_img_create(parent, NULL);
 			lv_obj_set_id(tuya_icon, 98);
@@ -1979,8 +2021,7 @@ void tuya_icon_display(lv_obj_t *parent, int *icon_offset, unsigned long arg1, u
 	}
 	else
 	{
-		Debug("tuya_online_status_get():%d,%ld,%d\n", tuya_online_status_get(), arg1, user_data_get()->wifi.wifi_connect_flag);
-		if (tuya_online_status_get() == true && user_data_get()->wifi.wifi_connect_flag && arg1)
+		if (tuya_online && network_connected && arg1)
 		{
 			lv_obj_set_pos(tuya_icon, ICON_OFFSET, 32);
 			lv_obj_set_hidden(tuya_icon, false);
@@ -1995,7 +2036,6 @@ void tuya_icon_display(lv_obj_t *parent, int *icon_offset, unsigned long arg1, u
 
 void door_icon_display(int door_id, lv_obj_t *parent, int *icon_offset, unsigned long arg1, unsigned long arg2)
 {
-	Debug("icon_offset:%d\n\n\n", *icon_offset);
 	lv_obj_t *door_icon = NULL;
 
 	if ((door_icon = lv_obj_get_child_form_id(parent, door_id ? 96 : 97)) == NULL)
@@ -2077,6 +2117,21 @@ bool goto_layout(const layout *layout)
 		return false;
 	}
 
+	if (monitor_enter_way_get() == MONITOR_ENTER_TUYA &&
+		layout != &layout_monitor &&
+		!tuya_session_target_allowed(tuya_session_target_from_layout(layout)))
+	{
+		msgbox_animat_create(text_str((layout == &layout_interphone || layout == &layout_call) ? STR_PHONE_MONITORING : STR_SYSYEM_BUSY), 1500);
+		return false;
+	}
+
+	if (cur_layout == &layout_monitor &&
+		monitor_enter_way_get() == MONITOR_ENTER_TUYA &&
+		tuya_session_target_allowed(tuya_session_target_from_layout(layout)))
+	{
+		monitor_background_ui_exit_request();
+	}
+
 	if (sdcard_insert_msg_box != NULL)
 	{
 		lv_obj_del(sdcard_insert_msg_box);
@@ -2150,6 +2205,12 @@ static void btn_event_handler(lv_obj_t *obj, lv_event_t event)
 	if (btn_ev == NULL)
 	{
 		return;
+	}
+	if (tuya_client_num_get() > 0 && (event == LV_EVENT_PRESSED || event == LV_EVENT_RELEASED))
+	{
+		Debug("[TUYA_UI_TRACE] lvgl btn event: obj=%p id=%d event=%d click=%d layout=%p clients=%d enter_way=%d\n",
+			  obj, obj->obj_id, event, lv_obj_get_click(obj), current_layout_get(),
+			  tuya_client_num_get(), monitor_enter_way_get());
 	}
 	// Debug("obj:%p,event:%d\n", obj, event);
 	if (event == LV_EVENT_PRESSED)

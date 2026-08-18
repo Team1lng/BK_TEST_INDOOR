@@ -47,6 +47,7 @@ void chime_sound_play(int ring_index, int volume, audio_play_callback start, aud
 			RING_PATH "3.mp3",
 			RING_PATH "4.mp3",
 			RING_PATH "5.mp3",
+			RING_PATH "6.mp3",
 			// RING_PATH"10.mp3",
 			// RING_PATH"11.mp3",
 			// RING_PATH"12.mp3"
@@ -104,6 +105,7 @@ bool door_ring_play(int ring_index, int volume, bool send_net, audio_play_callba
 			RING_PATH "3.mp3",
 			RING_PATH "4.mp3",
 			RING_PATH "5.mp3",
+			RING_PATH "6.mp3",
 			// RING_PATH"10.mp3",
 			// RING_PATH"11.mp3",
 			// RING_PATH"12.mp3"

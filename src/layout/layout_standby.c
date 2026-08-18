@@ -1,4 +1,5 @@
 #include "layout_define.h"
+#include "tuya_session_guard.h"
 static void motion_detect_func(unsigned long arg1, unsigned long arg2);
 static void monitor_video_mode_close(void);
 static void motion_2_head_create(void);
@@ -186,6 +187,12 @@ void tuya_event_motion_proc(unsigned long arg1, unsigned long arg2)
 	case TUYA_EVENT_TALK:
 		if (arg2 == true)
 		{
+			if (is_tuya_talking)
+			{
+				Debug("=======>>TUYA_EVENT_TALK already started\n\n\n");
+				break;
+			}
+
 			MONITOR_CH monitor_ch = monitor_channel_get();
 			network_device devcie = monitor_ch == MON_CH_DOOR_1 ? DEVICE_OUTDOOR_1 : DEVICE_OUTDOOR_2;
 			audio_talk_ctrl ctrl = {{devcie}, (OPERATION_OPTION(AUDIO_SEND_EN) | OPERATION_OPTION(AUDIO_RECEIVE_EN)), AI_AO_C, true, false, monitor_ch == MON_CH_DOOR_1 ? user_data_get()->door1.talk_volume * 5 + 46 : user_data_get()->door2.talk_volume * 5 + 46};
@@ -193,35 +200,21 @@ void tuya_event_motion_proc(unsigned long arg1, unsigned long arg2)
 			send_monitor_talk_cmd(true);
 			is_tuya_talking = true;
 		}
-		// else
-		// {
-		// 	send_monitor_talk_cmd(false);
-		// 	is_talking = false;
-		// 	is_tuya_talking = false;
-		// }
+		else if (is_tuya_talking)
+		{
+			Debug("=======>>TUYA_EVENT_TALK stop\n\n\n");
+			send_monitor_talk_cmd(false);
+			is_tuya_talking = false;
+		}
 		break;
 		/*进入监控*/
 	case TUYA_EVENT_MONITOR_ENTER:
 		record_video_stop(true);
 		gui_draw_area_set_2();
-		if (user_data_get()->other.MD_preview == false)
-		{
-			if (user_data_get()->other.screen_saver)
-				standby_obj_disable();
-
-			motion_2_head_create(); // 画UI
-
-			standby_black_screen(false); // backlight_open(true, false, user_data_get()->other.brightness);
-			lv_obj_set_click(lv_scr_act(), false);
-		}
 		tuya_channel_valid_report();
 		monitor_enter_way_set(MONITOR_ENTER_TUYA);
 		// send_monitor_talk_cmd(true);
-		if (back_btn != NULL)
-		{
-			lv_obj_set_hidden(back_btn, true);
-		}
-		fb_background_enable(false);
+		// 手机端进入涂鸦监控时，室内机不进入监控界面，保持当前页面正常使用
 		break;
 		/*退出监控*/
 	case TUYA_EVENT_MONITOR_QUIT:
@@ -235,7 +228,7 @@ void tuya_event_motion_proc(unsigned long arg1, unsigned long arg2)
 
 		if (is_tuya_talking)
 		{
-			// send_monitor_talk_cmd(false);
+			send_monitor_talk_cmd(false);
 			is_tuya_talking = false;
 		}
 
@@ -651,7 +644,8 @@ void weather_anim_deleted_cb(struct _lv_obj_t *obj, lv_event_t event)
 
 void standby_weather_widgets_up(lv_obj_t *obj /* ,lv_event_t event */)
 {
-	goto_layout(pLAYOUT(standby));
+	Debug("[TUYA_UI_TRACE] weather screen touch -> standby_click_up\n");
+	standby_click_up(obj);
 }
 
 void standby_weather_widgets_create(void)
@@ -903,10 +897,15 @@ static void monitor_indoor_cmd_func(unsigned long arg1, unsigned long arg2)
 bool get_outdoor_talk_state(MONITOR_CH ch);
 static void standby_click_up(lv_obj_t *obj)
 {
+	bool outdoor_talking = get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2);
+	bool tuya_client_active = tuya_client_num_get() > 0;
 
-	Debug("==================>>>>:%d  %d\n\n\n", tuya_monitor_state_get(), get_outdoor_talk_state(MON_CH_DOOR_1));
-	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2) || tuya_monitor_state_get())
+	Debug("[TUYA_UI_TRACE] standby screen touch: enter_way=%d clients=%d monitor_state=%d screen_click=%d door1_talk=%d door2_talk=%d\n",
+		  monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()),
+		  get_outdoor_talk_state(MON_CH_DOOR_1), get_outdoor_talk_state(MON_CH_DOOR_2));
+	if (!tuya_session_standby_touch_allowed(outdoor_talking, tuya_client_active))
 	{
+		Debug("[TUYA_UI_TRACE] standby screen touch blocked by non-tuya outdoor call\n");
 		return;
 	}
 
@@ -1025,7 +1024,7 @@ static void standby_time_display_task(struct _lv_task_t *task_t)
 static void standby_time_touch_up(lv_obj_t *obj)
 {
 	Debug("==================>>>>:%d\n\n\n", backlight_status_get());
-	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2) || tuya_monitor_state_get())
+	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2))
 	{
 		return;
 	}
@@ -1206,6 +1205,18 @@ static void standby_Lock_1_task(lv_task_t *task_t)
 }
 
 static lv_task_t *gate_1_task_t = NULL;
+
+static bool standby_shortcut_allowed(bool requires_local_audio)
+{
+	if (tuya_session_standby_shortcut_allowed(tuya_audio_occupied_check(), requires_local_audio))
+	{
+		return true;
+	}
+
+	msgbox_animat_create(text_str(STR_SYSYEM_BUSY), 1500);
+	return false;
+}
+
 static void standby_gate_task(lv_task_t *task_t)
 {
 	printf("%s =================>>%d\n\r", __func__, __LINE__);
@@ -1227,8 +1238,14 @@ static void standby_gate_task(lv_task_t *task_t)
 
 static void standy_menu_btn_up(lv_obj_t *obj)
 {
-	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2) || tuya_monitor_state_get()) // 正在视频对讲其他机子无法操作
+	bool outdoor_talking = get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2);
+	bool tuya_client_active = tuya_client_num_get() > 0;
+
+	Debug("[TUYA_UI_TRACE] standby shortcut touch: id=%d outdoor_talking=%d clients=%d\n",
+		  obj->obj_id, outdoor_talking, tuya_client_num_get());
+	if (!tuya_session_standby_touch_allowed(outdoor_talking, tuya_client_active))
 	{
+		Debug("[TUYA_UI_TRACE] standby shortcut blocked by non-tuya outdoor call\n");
 		return;
 	}
 
@@ -1237,6 +1254,8 @@ static void standy_menu_btn_up(lv_obj_t *obj)
 	switch (obj->obj_id)
 	{
 	case MONITOR_MODULE:
+		if (!standby_shortcut_allowed(true))
+			return;
 		system_bg_data_backup();			// 背景颜色恢复
 		monitor_channel_set(MON_CH_DOOR_1); // 通道选择 手动进入就是DOOR1
 
@@ -1249,15 +1268,21 @@ static void standy_menu_btn_up(lv_obj_t *obj)
 	// 	goto_layout(pLAYOUT(transfer));
 	// 	break;
 	case CALL_MODULE:
+		if (!standby_shortcut_allowed(true))
+			return;
 		carr_record_way_set(FILE_TYPE_SD_CALL);
 		goto_layout(pLAYOUT(file_list));
 		break;
 
 	case MESSAGE_MODULE:
+		if (!standby_shortcut_allowed(true))
+			return;
 		carr_record_way_set(FILE_TYPE_SD_MSG);
 		goto_layout(pLAYOUT(file_list));
 		break;
 	case MOTION_MODULE:
+		if (!standby_shortcut_allowed(true))
+			return;
 		carr_record_way_set(FILE_TYPE_SD_MOTION);
 		goto_layout(pLAYOUT(file_list));
 		break;
@@ -1634,7 +1659,7 @@ static void motion_channel_label_display(void)
 
 static void motion_back_btn_up(lv_obj_t *obj)
 {
-	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2) || tuya_monitor_state_get())
+	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2))
 	{
 		return;
 	}
@@ -2099,6 +2124,8 @@ static void LAYOUT_ENETER_FUNC(standby)
 	obj->user_data = &btn_data;
 	btn_touch_event_listen(obj);
 	lv_obj_set_click(obj, true);
+	Debug("[TUYA_UI_TRACE] standby enter: screen_click=%d enter_way=%d clients=%d monitor_state=%d\n",
+		  lv_obj_get_click(obj), monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get());
 	static rom_bin_info info = rom_bin_info_get(ROM_RES_BG_BG3_JPG);
 
 	if (is_sdcard_insert() == true && !user_data_get()->door1.motion_sensitivity && !user_data_get()->door2.motion_sensitivity && user_data_get()->scene.digital_photo_frame_sw && picture_play_parameter_init())
@@ -2152,12 +2179,25 @@ static void LAYOUT_ENETER_FUNC(standby)
 
 static void LAYOUT_QUIT_FUNC(standby)
 {
+	bool keep_tuya_media = tuya_session_keep_shared_media(
+		tuya_client_num_get() > 0,
+		monitor_enter_way_get() == MONITOR_ENTER_TUYA);
+
 	sdcard_event_register(setting_sdcard_callback);
 	tuya_cloud_storage_stop();
 	if (monitor_enter_way_get() != MONITOR_ENTER_CALL)
 	{
-		monitor_video_mode_close();
-		audio_talk_close(true);
+		if (keep_tuya_media)
+		{
+			Debug("[TUYA_AUDIO_TRACE] standby layout quit: preserve tuya media, clients=%d\n", tuya_client_num_get());
+			fb_video_mode_enable(false);
+			video_decode_close();
+		}
+		else
+		{
+			monitor_video_mode_close();
+			audio_talk_close(true);
+		}
 	}
 	else
 		record_video_stop(0x00);
@@ -2241,7 +2281,15 @@ static void LAYOUT_QUIT_FUNC(standby)
 	// ak_sleep_ms(1000);
 
 	// home_bg_display();
-	outdoor_order_set(NET_COMMON_CMD_NONE);
+	if (tuya_session_preserve_outdoor_tuya_order(tuya_client_num_get() > 0))
+	{
+		Debug("[TUYA_STREAM_TRACE] standby layout quit: preserve outdoor Tuya order\n");
+		outdoor_order_set(NET_COMMON_PARAM_CAMERA_TUYA);
+	}
+	else
+	{
+		outdoor_order_set(NET_COMMON_CMD_NONE);
+	}
 	// printf("%s ==============================>>>%d   %lld\n\r",__func__,__LINE__,os_get_ms() - x);
 	// x = os_get_ms();
 	if (monitor_enter_way_get() == MONITOR_ENTER_CALL)

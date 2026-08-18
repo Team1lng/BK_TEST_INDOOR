@@ -1,4 +1,5 @@
 #include "network_common.h"
+#include "tuya_stream_keepalive_policy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -132,11 +133,92 @@ door_staus_info *get_outdoor_info(int ch)
 extern bool device_id_repeat_push(network_device device);
 
 static int outdoor_order_arg2 = 0x00;
+static unsigned long long outdoor_stream_status_last_send_ms[2] = {0};
+extern bool get_video_data_display_state(void);
+
+static int outdoor_stream_status_index_get(network_device device)
+{
+	if (device == DEVICE_OUTDOOR_1)
+	{
+		return 0;
+	}
+	if (device == DEVICE_OUTDOOR_2)
+	{
+		return 1;
+	}
+
+	return -1;
+}
+
+static void outdoor_stream_status_send(network_device device,
+									   bool active_keepalive,
+									   unsigned long long now_ms)
+{
+	int index = outdoor_stream_status_index_get(device);
+	extern bool get_video_data_display_state(void);
+	network_cmd_data data;
+	int outdoor_order;
+
+	if (index < 0)
+	{
+		return;
+	}
+
+	ak_thread_mutex_lock(&outdoor_order_mutex);
+	data.cmd = NET_COMMON_CMD_STREAM_STATUS;
+	data.arg1 = (tuya_client_num_get() ? true : get_video_data_display_state()) | outdoor_order_arg2;
+	if (active_keepalive)
+	{
+		data.arg1 |= NET_COMMON_PARAM_CAMERA_TUYA;
+	}
+	data.arg2 = device == DEVICE_OUTDOOR_1 ? monitor_config_get()->outdoor1->out_talk_volume : monitor_config_get()->outdoor2->out_talk_volume;
+	data.device = device;
+	network_send_cmd_data(&data);
+	outdoor_stream_status_last_send_ms[index] = now_ms;
+	outdoor_order = outdoor_order_arg2;
+	ak_thread_mutex_unlock(&outdoor_order_mutex);
+
+	if (active_keepalive)
+	{
+		Debug_Lib("[TUYA_STREAM_TRACE] active keepalive: device=%d clients=%d order=0x%x arg1=0x%x\n",
+				  device, tuya_client_num_get(), outdoor_order, data.arg1);
+	}
+}
+
+void network_tuya_stream_keepalive_maybe_send(network_device device,
+												unsigned long long now_ms)
+{
+	int index = outdoor_stream_status_index_get(device);
+	unsigned long long last_send_ms;
+
+	if (index < 0)
+	{
+		return;
+	}
+
+	ak_thread_mutex_lock(&outdoor_order_mutex);
+	last_send_ms = outdoor_stream_status_last_send_ms[index];
+	ak_thread_mutex_unlock(&outdoor_order_mutex);
+	if (tuya_stream_keepalive_due(tuya_client_num_get() > 0, now_ms, last_send_ms, 2000))
+	{
+		outdoor_stream_status_send(device, true, now_ms);
+	}
+}
+
 void outdoor_order_set(int cmd)
 {
+	int previous_cmd;
+
 	ak_thread_mutex_lock(&outdoor_order_mutex);
+	previous_cmd = outdoor_order_arg2;
 	outdoor_order_arg2 = cmd;
 	ak_thread_mutex_unlock(&outdoor_order_mutex);
+
+	if (previous_cmd != cmd)
+	{
+		Debug_Lib("[TUYA_STREAM_TRACE] outdoor order: 0x%x -> 0x%x clients=%d enter_way=%d\n",
+				  previous_cmd, cmd, tuya_client_num_get(), monitor_enter_way_get());
+	}
 }
 
 void network_local_device_set(network_device device)
@@ -742,7 +824,7 @@ static void net_common_def_exit_button_func(net_common_pack_info info)
 
 static void net_common_stream_status_func(net_common_pack_info info)
 {
-	extern bool get_video_data_display_state(void);
+	static unsigned long long last_stream_trace_ms;
 	bool monitor_message_ing(void);
 
 	MONITOR_CH ch = monitor_channel_get();
@@ -799,32 +881,23 @@ static void net_common_stream_status_func(net_common_pack_info info)
 	{
 		if (network_common_socket_eth_p_get(0, network_get_id_outdoor1(network_local_device_get()), 0) == curr_network_video_receive_eth_id_get())
 		{
-			ak_thread_mutex_lock(&outdoor_order_mutex);
-			network_cmd_data data;
-			data.cmd = NET_COMMON_CMD_STREAM_STATUS;
-			data.arg1 = (tuya_client_num_get() ? true : get_video_data_display_state()) | outdoor_order_arg2;
-			data.arg2 = monitor_config_get()->outdoor1->out_talk_volume;
-			data.device = DEVICE_OUTDOOR_1;
-			network_send_cmd_data(&data);
-			//    printf("send NET_COMMON_CMD_STREAM_STATUS -> OUTDOOR1  outdoor_order_arg2 : %d \n",outdoor_order_arg2);
-
-			ak_thread_mutex_unlock(&outdoor_order_mutex);
+			if (os_get_ms() - last_stream_trace_ms >= 2000)
+			{
+				Debug_Lib("[TUYA_STREAM_TRACE] stream keepalive: from=%d ch=%d clients=%d display=%d order=0x%x reply_arg1=0x%x video_eth=0x%x\n",
+						  info.send_device, ch, tuya_client_num_get(), get_video_data_display_state(),
+						  outdoor_order_arg2,
+						  (tuya_client_num_get() ? true : get_video_data_display_state()) | outdoor_order_arg2,
+						  curr_network_video_receive_eth_id_get());
+				last_stream_trace_ms = os_get_ms();
+			}
+			outdoor_stream_status_send(DEVICE_OUTDOOR_1, false, os_get_ms());
 		}
 	}
 	else if (monitor_config_get()->outdoor2->enable_sw && (ch == MON_CH_DOOR_2) && (info.send_device == DEVICE_OUTDOOR_2))
 	{
 		if (network_common_socket_eth_p_get(0, network_get_id_outdoor2(network_local_device_get()), 0) == curr_network_video_receive_eth_id_get())
 		{
-			ak_thread_mutex_lock(&outdoor_order_mutex);
-			network_cmd_data data;
-			data.cmd = NET_COMMON_CMD_STREAM_STATUS;
-			data.arg1 = (tuya_client_num_get() ? true : get_video_data_display_state()) | outdoor_order_arg2;
-			data.arg2 = monitor_config_get()->outdoor2->out_talk_volume;
-			data.device = DEVICE_OUTDOOR_2;
-			network_send_cmd_data(&data);
-			//  printf("send NET_COMMON_CMD_STREAM_STATUS -> OUTDOOR2 \n");
-
-			ak_thread_mutex_unlock(&outdoor_order_mutex);
+			outdoor_stream_status_send(DEVICE_OUTDOOR_2, false, os_get_ms());
 		}
 	}
 	else if (network_local_device_get() == DEVICE_INDOOR_ID1 && (info.arg1 & 0x01) == 1) // 接受到移动侦测信号且未进入视频通道

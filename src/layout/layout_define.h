@@ -489,9 +489,10 @@ enum btn_string_id
     STR_SYSYEM_BUSY,
     STR_EXIT_BUTTON,
 
-    STR_TUYA_UNBIND,
-    STR_UNBIND_HINT,
-    STR_TOTAL
+	STR_TUYA_UNBIND,
+	STR_UNBIND_HINT,
+	STR_PHONE_MONITORING,
+	STR_TOTAL
 };
 // const char *multi_lingual[STR_TOTAL][LANGUAGE_TOTAL];
 #ifdef BCOM_OID_VERSION
@@ -587,6 +588,9 @@ bool dev_info_status_event_push(unsigned long arg1, unsigned long arg2);
 void default_gate2_unlock_callback(unsigned long arg1, unsigned long arg2);
 void default_camera_status_callback(unsigned long arg1, unsigned long arg2);
 void tuya_event_register(event_pro_callback handle);
+bool tuya_audio_occupied_check(void);
+bool tuya_talk_active_get(void);
+bool indoor_is_local_monitoring(void);
 bool tuya_monitor_swap_event(int ch);
 bool tuya_enter_monitor_push(void);
 bool tuya_monitor_talk_event(bool state);

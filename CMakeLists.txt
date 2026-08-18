@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22.1)
+cmake_minimum_required(VERSION 2.8)
 
 # cmake最低使用版本
 # /opt/arm-anykav500-linux-uclibcgnueabi/usr/bin/
@@ -29,7 +29,7 @@ set(GVS_LOGO_NAME "gvs.rgb")
 set(HOMSECUR_LOGO_NAME "homsecur.rgb")
 set(TARGET_LOGO_NAME "anyka_logo.rgb")
 
-SET(IPS_SCREEN 8)
+SET(IPS_SCREEN 7)
 SET(CMAKE_APP_OID OFF)
 
 # add_definitions(-DDHCP_IPCAMERA)

@@ -5,6 +5,22 @@ static void interphone_call_event_inside_func(unsigned long arg1,unsigned long a
 static void interphone_out_page_create(void);
 static void interphone_call_talk_page_create(void);
 
+static bool interphone_tuya_session_active(void)
+{
+	return tuya_client_num_get() > 0 || monitor_enter_way_get() == MONITOR_ENTER_TUYA ||
+		   tuya_audio_occupied_check();
+}
+
+static void interphone_busy_reply(network_device device)
+{
+	network_cmd_data data;
+	data.device = device;
+	data.cmd = NET_COMMON_CMD_INTERCOM_CALL;
+	data.arg1 = 5;
+	data.arg2 = (char)user_data_get()->other.network_device;
+	network_send_cmd_data(&data);
+}
+
 
 interphone_status_enum interphone_status = INTERPHONE_STATUS_IDLE;
 
@@ -186,6 +202,12 @@ static void interphone_call_out_btn_up(lv_obj_t* obj)
 {
 	if(interphone_status == INTERPHONE_STATUS_IDLE)
 	{
+		if (interphone_tuya_session_active())
+		{
+			msgbox_animat_create(text_str(STR_PHONE_MONITORING), 1500);
+			return;
+		}
+
 		network_cmd_data data;
 		data.cmd = NET_COMMON_CMD_INTERCOM_CALL;
 		data.arg1 = 1;
@@ -515,6 +537,13 @@ static void interphone_call_event_extern_func(unsigned long arg1,unsigned long a
 	{
 		if(interphone_status == INTERPHONE_STATUS_IDLE)
 		{
+			if (interphone_tuya_session_active())
+			{
+				interphone_busy_reply((network_device)arg2);
+				return;
+			}
+			if (tuya_audio_occupied_check())
+				return;
 			interphone_call_mastar_device = (network_device)arg2;
 			network_cmd_data data;
 			data.device = interphone_call_mastar_device;
@@ -540,6 +569,13 @@ static void interphone_call_event_inside_func(unsigned long arg1,unsigned long a
 	{
 		if(interphone_status == INTERPHONE_STATUS_IDLE)
 		{
+			if (interphone_tuya_session_active())
+			{
+				interphone_busy_reply((network_device)arg2);
+				return;
+			}
+			if (tuya_audio_occupied_check())
+				return;
 			interphone_call_mastar_device = (network_device)arg2;
 			
 			network_cmd_data data;
@@ -648,6 +684,14 @@ static void interphone_call_event_inside_func(unsigned long arg1,unsigned long a
 					goto_layout(pLAYOUT(home));
 				}
 			}	
+		}
+	}
+	else if(arg1 == 5)
+	{
+		if (interphone_status == INTERPHONE_STATUS_PUBLISH || interphone_status == INTERPHONE_STATUS_OUT)
+		{
+			goto_layout(pLAYOUT(home));
+			msgbox_animat_create(text_str(STR_DEVICE_BUSY), 1500);
 		}
 	}
 }

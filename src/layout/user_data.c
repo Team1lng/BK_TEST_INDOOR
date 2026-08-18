@@ -617,6 +617,30 @@ bool user_data_save(void)
 	return true;
 }
 
+bool user_data_save_sync(void)
+{
+	int fd = open(USER_DATA_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	if (fd < 0)
+	{
+		Debug("write open %s fail \n", USER_DATA_PATH);
+		return false;
+	}
+
+	ssize_t write_len = write(fd, &user_data, sizeof(user_data_info));
+	if (write_len != sizeof(user_data_info))
+	{
+		Debug("write %s fail, len:%d expected:%d\n", USER_DATA_PATH, (int)write_len, (int)sizeof(user_data_info));
+		close(fd);
+		return false;
+	}
+
+	fsync(fd);
+	close(fd);
+	user_data_save_flag = false;
+	system("sync");
+	return true;
+}
+
 #define ETH2_STATIC_IP "192.168.188.1"
 static void *network_pairing_init_task(void *arg)
 {

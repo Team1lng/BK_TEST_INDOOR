@@ -161,6 +161,7 @@ bool is_sdcard_insert(void);
 
 void monitor_enter_way_set(MONITOR_ENTER_WAY flag);
 MONITOR_ENTER_WAY monitor_enter_way_get(void);
+void monitor_background_ui_exit_request(void);
 
 void monitor_channel_set(MONITOR_CH ch);
 void monitor_open(bool reset);

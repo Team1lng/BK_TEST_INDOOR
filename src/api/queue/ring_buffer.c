@@ -16,6 +16,11 @@ bool ring_buffer_init(ring_buffer *ring, int size, ak_mutex_t *mutex)
 	ring->cache_len = 0;
 	ring->ring_len = size;
 	ring->mutex = mutex;
+	ring->perf_writes = 0;
+	ring->perf_overwrites = 0;
+	ring->perf_written_bytes = 0;
+	ring->perf_overwritten_bytes = 0;
+	ring->perf_peak_cache_len = 0;
 	ak_thread_cond_init(&ring->cond);
 	// ak_thread_mutex_init(&ring->mutex,NULL);
 	return true;
@@ -54,6 +59,8 @@ bool ring_buffer_write(ring_buffer *ring, char *data, int size)
 	if ((ring->cache_len + size) > ring->ring_len)
 	{
 		int move_len = ring->cache_len + size - ring->ring_len;
+		ring->perf_overwrites++;
+		ring->perf_overwritten_bytes += move_len;
 		if ((ring->r_addr + move_len) > ring->tail)
 		{
 			int len1 = ring->tail - ring->r_addr;
@@ -70,8 +77,43 @@ bool ring_buffer_write(ring_buffer *ring, char *data, int size)
 	{
 		ring->cache_len += size;
 	}
+	ring->perf_writes++;
+	ring->perf_written_bytes += size;
+	if (ring->cache_len > ring->perf_peak_cache_len)
+	{
+		ring->perf_peak_cache_len = ring->cache_len;
+	}
 	ak_thread_mutex_unlock(ring->mutex);
 	ak_thread_cond_broadcast(&ring->cond);
+	return true;
+}
+
+bool ring_buffer_perf_stats_snapshot(ring_buffer *ring,
+								ring_buffer_perf_stats *stats,
+								bool reset_interval)
+{
+	if ((ring == NULL) || (stats == NULL) || (ring->mutex == NULL))
+	{
+		return false;
+	}
+
+	ak_thread_mutex_lock(ring->mutex);
+	stats->current_bytes = ring->cache_len;
+	stats->peak_bytes = ring->perf_peak_cache_len;
+	stats->writes = ring->perf_writes;
+	stats->overwrites = ring->perf_overwrites;
+	stats->written_bytes = ring->perf_written_bytes;
+	stats->overwritten_bytes = ring->perf_overwritten_bytes;
+	if (reset_interval)
+	{
+		ring->perf_writes = 0;
+		ring->perf_overwrites = 0;
+		ring->perf_written_bytes = 0;
+		ring->perf_overwritten_bytes = 0;
+		ring->perf_peak_cache_len = ring->cache_len;
+	}
+	ak_thread_mutex_unlock(ring->mutex);
+
 	return true;
 }
 

@@ -109,6 +109,8 @@ static void home_transfer_btn_down(lv_obj_t *obj)
 
 static void home_transfer_btn_up(lv_obj_t *obj)
 {
+	if (tuya_audio_occupied_check())
+		return;
 #ifdef FAMILY_TRANSFER_MODULE
 	goto_layout(pLAYOUT(family_transfer));
 #else
@@ -151,6 +153,8 @@ static void home_Monitoring_btn_down(lv_obj_t *obj)
 
 static void home_Monitoring_btn_up(lv_obj_t *obj)
 {
+	if (tuya_audio_occupied_check())
+		return;
 	// lv_disp_set_bg_opa(lv_disp_get_default(), LV_OPA_TRANSP);
 	goto_layout(pLAYOUT(monitor_1));
 }
@@ -167,6 +171,8 @@ static void home_Monitoring_create(Controls_location **coordinate)
 
 static void home_media_btn_up(lv_obj_t *obj)
 {
+	if (tuya_audio_occupied_check())
+		return;
 	goto_layout(pLAYOUT(media));
 }
 
@@ -182,6 +188,8 @@ static void home_media_btn_create(Controls_location **coordinate)
 
 static void home_event_btn_up(lv_obj_t *obj)
 {
+	if (tuya_audio_occupied_check())
+		return;
 	goto_layout(pLAYOUT(event));
 }
 
@@ -642,7 +650,10 @@ static void LAYOUT_ENETER_FUNC(home)
 	if (wifi_usb_module_enable())
 	{
 		ak_pthread_t wpa_cli_scan_wifi_thread = 0;
-		ak_thread_create(&wpa_cli_scan_wifi_thread, wpa_cli_scan_wifi_task, NULL, ANYKA_THREAD_NORMAL_STACK_SIZE, -1);
+		if (ak_thread_create(&wpa_cli_scan_wifi_thread, wpa_cli_scan_wifi_task, NULL, ANYKA_THREAD_NORMAL_STACK_SIZE, -1) == 0)
+		{
+			ak_thread_detach(wpa_cli_scan_wifi_thread);
+		}
 	}
 
 #if 0

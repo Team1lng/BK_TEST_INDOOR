@@ -12,6 +12,23 @@ int connectwifi_index = 0;
 int connected_wifi_max = 0;
 static void network_btn_up(lv_obj_t *obj);
 
+static void *wifi_page_scan_task(void *arg)
+{
+	bool continue_flag = true;
+	wpa_cli_scan_wifi(&continue_flag);
+	ak_thread_exit();
+	return NULL;
+}
+
+static void wifi_page_scan_start(void)
+{
+	ak_pthread_t thread_id = 0;
+	if (ak_thread_create(&thread_id, wifi_page_scan_task, NULL, ANYKA_THREAD_NORMAL_STACK_SIZE, -1) == 0)
+	{
+		ak_thread_detach(thread_id);
+	}
+}
+
 static void network_window_create(char *str);
 
 typedef enum
@@ -351,6 +368,7 @@ static void WLAN_btn_down(lv_obj_t *obj)
 	}
 
 	wifi_page_create(lv_scr_act());
+	wifi_page_scan_start();
 	WLAN_INFO_B = WLAN_BTN;
 }
 
@@ -619,6 +637,7 @@ static void close_wifi_connect(void)
 	if (connect_falge)
 	{
 		connect_falge = false;
+		wifi_connection_check_cancel();
 		system("killall wpa_supplicant");
 		system("killall udhcpc");
 
@@ -638,12 +657,10 @@ static void msg_task(struct _lv_task_t *task_t)
 		if (task_timer <= 12)
 		{
 			task_timer++;
-			int connect_ret = wifi_connection_status_sucess();
-			if (connect_ret == 1 && (task_timer > 3))
+			int connect_ret = wifi_connection_check_state();
+			if (connect_ret == WIFI_CONNECTION_CHECK_SUCCESS && (task_timer > 3))
 			{ // 连接成功
-
-				system("\\cp -rf /tmp/wpa_supplicant.conf " WPA_SUPPLICANT_PATH " &");
-				system("sync");
+				connect_falge = false;
 				user_data_get()->wifi.wifi_connect_flag = true;
 				user_data_save();
 				goto_layout(pLAYOUT(setting_wifi));
@@ -652,23 +669,20 @@ static void msg_task(struct _lv_task_t *task_t)
 				task_timer = 0;
 			}
 		}
-		else
+		else if (wifi_connection_check_state() == WIFI_CONNECTION_CHECK_FAIL || task_timer > 30)
 		{ // 连接失败
 			connect_falge = false;
+			wifi_connection_check_cancel();
 			task_timer = 0;
 			lv_obj_t *msg1 = connect_wifi_cb();
 			set_msg_text(msg1, CONNECT_FAIL);
 			if (msg)
 				lv_obj_del(msg);
-			system("killall wpa_supplicant &");
-			system("killall udhcpc &");
-			system("rm -rf /tmp/wpa_supplicant.conf &");
-
-			char cmd[128] = {0};
-			snprintf(cmd, sizeof(cmd), "wpa_supplicant -Dnl80211 -i wlan0 -c %s -B &", WPA_SUPPLICANT_PATH);
-			system(cmd);
-			system("udhcpc -i wlan0 -n 4 -R &");
 		}
+	}
+	else
+	{
+		task_timer = 0;
 	}
 	return;
 }
@@ -696,6 +710,7 @@ static void wifibtn_up(lv_obj_t *obj)
 			lv_task_del(msg_ui_ptask);
 		}
 		connect_falge = true;
+		wifi_connection_check_start();
 		msg_ui_ptask = lv_task_create(msg_task, 1000, LV_TASK_PRIO_HIGH, NULL);
 	}
 	else
@@ -956,11 +971,6 @@ static void findwifi_wifibtn_create(lv_obj_t *parent)
 	int8_t sum = 0; // 划线的数量
 	connectwifi_index = 0;
 
-	// 打开后
-	bool a = true;
-	wpa_cli_scan_wifi(&a);
-	wpa_cli_wlan_status(&a);
-
 	memset(&link_info, 0, sizeof(linked_info));
 	get_linked_wifi_info(&link_info);
 
@@ -993,7 +1003,6 @@ static void findwifi_wifibtn_create(lv_obj_t *parent)
 	// wpa_cli_wlan_status(&a);
 
 	connected_wifi_max = get_max_wifi_list_index(); // 获取到搜索到的wifi的总数
-	printf("@@@@@@@@@@@@@@@@@@@@@@@%d\n", connected_wifi_max);
 
 	static wifi_info info;
 	for (int i = 0; i < connected_wifi_max; i++)
@@ -1204,12 +1213,14 @@ static void window_yes_btn_up(lv_obj_t *obj)
 	if (str == text_str(STR_DISCONNECT_WIFI))
 	{
 		turn_off_wlan_break();
+		memset(&link_info, 0, sizeof(link_info));
 		user_data_get()->wifi.wifi_connect_flag = false;
+		user_data_save_sync();
 	}
 	else if (str == text_str(STR_RESTART_SYSTEM))
 	{
 		user_data_get()->pairing_mode = net_pairing_mode;
-		user_data_get()->wifi.wifi_open_flag = user_data_get()->wifi.wifi_connect_flag = 0;
+		// user_data_get()->wifi.wifi_open_flag = user_data_get()->wifi.wifi_connect_flag = 0;
 		user_data_save();
 		backlight_open(false, false, 0);
 		extern int lcd_reset_pin_higt(void);
@@ -1294,8 +1305,6 @@ void find_link_wifi(void)
 
 	get_linked_wifi_info(&link_info);
 
-	printf("#################:%s\n", link_info.wlan_ssid);
-	printf("@@@@@@@@@@@@@@@@@@:%d\n", link_info.completed);
 }
 
 static void LAYOUT_ENETER_FUNC(setting_wifi)

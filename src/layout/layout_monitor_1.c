@@ -1,5 +1,6 @@
 #include "layout_define.h"
 #include "leo_api.h"
+#include "tuya_session_guard.h"
 
 typedef enum monitor_1_module_list
 {
@@ -32,10 +33,10 @@ bool get_outdoor_talk_state(MONITOR_CH ch);
 
 static void monitor_1_door1_btn_up(lv_obj_t *obj)
 {
-	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2)) // 正在视频对讲其他机子无法操作
-	{
+	bool outdoor_busy = get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2);
+
+	if (!tuya_session_local_monitor_allowed(outdoor_busy, tuya_client_num_get() > 0, tuya_audio_occupied_check()))
 		return;
-	}
 	system_bg_data_backup();			// 背景颜色恢复
 	monitor_channel_set(MON_CH_DOOR_1); // 通道选择 手动进入就是DOOR1
 
@@ -58,11 +59,10 @@ static void monitor_1_door1_btn_create(Controls_location coordinate)
 
 static void monitor_1_door2_btn_up(lv_obj_t *obj)
 {
+	bool outdoor_busy = get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2);
 
-	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2)) // 正在视频对讲其他机子无法操作
-	{
+	if (!tuya_session_local_monitor_allowed(outdoor_busy, tuya_client_num_get() > 0, tuya_audio_occupied_check()))
 		return;
-	}
 	system_bg_data_backup(); // 背景颜色恢复
 	if (user_data_get()->door2.enable_sw)
 	{
@@ -88,11 +88,10 @@ static void monitor_1_door2_btn_create(Controls_location coordinate)
 #ifdef CAMERA_MODULE_ENABLE
 static void monitor_1_camera1_btn_up(lv_obj_t *obj)
 {
+	bool outdoor_busy = get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2);
 
-	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2)) // 正在视频对讲其他机子无法操作
-	{
+	if (!tuya_session_local_monitor_allowed(outdoor_busy, tuya_client_num_get() > 0, tuya_audio_occupied_check()))
 		return;
-	}
 	system_bg_data_backup(); // 背景颜色恢复
 	if (user_data_get()->camera1.enable)
 	{
@@ -114,11 +113,10 @@ static void monitor_1_camera1_btn_create(Controls_location coordinate)
 
 static void monitor_1_camera2_btn_up(lv_obj_t *obj)
 {
+	bool outdoor_busy = get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2);
 
-	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2)) // 正在视频对讲其他机子无法操作
-	{
+	if (!tuya_session_local_monitor_allowed(outdoor_busy, tuya_client_num_get() > 0, tuya_audio_occupied_check()))
 		return;
-	}
 
 	system_bg_data_backup(); // 背景颜色恢复
 

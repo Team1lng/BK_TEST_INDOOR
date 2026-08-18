@@ -6,6 +6,7 @@
 #include "../audio/audio_input.h"
 #include "../audio/audio_decode.h"
 #include "stdio.h"
+#include "monitor_video_mode_guard.h"
 
 static MONITOR_ENTER_WAY monitor_enter_flag = MONITOR_ENTER_NONE;
 
@@ -50,6 +51,9 @@ extern bool rtsp_stream_open(char *url);
 
 void monitor_open(bool reset)
 {
+	bool tuya_background_session = monitor_enter_way_get() == MONITOR_ENTER_TUYA;
+	bool local_video_decode_required = monitor_local_video_decode_required(tuya_background_session);
+
 	Debug_Lib("[%s]==========================>>>\n", __func__);
 	if (monitor_channel == MON_CH_NONE)
 	{
@@ -68,13 +72,15 @@ void monitor_open(bool reset)
 	if (monitor_channel == MON_CH_DOOR_1 && (device_online_state_get(DEVICE_OUTDOOR_1) || monitor_enter_way_get() == MONITOR_ENTER_CALL))
 	{
 		int eth_p_id = network_common_socket_eth_p_get(0, network_get_id_outdoor1(network_local_device_get()), 0);
-		video_decode_open(0, DECODE_WIDTH, DECODE_HIGHT); // 640, 360);
+		if (local_video_decode_required)
+			video_decode_open(0, DECODE_WIDTH, DECODE_HIGHT); // 640, 360);
 		network_video_receive_package_open(eth_p_id);	  // while(1);
 	}
 	else if (monitor_channel == MON_CH_DOOR_2 && (device_online_state_get(DEVICE_OUTDOOR_2) || monitor_enter_way_get() == MONITOR_ENTER_CALL))
 	{
 		int eth_p_id = network_common_socket_eth_p_get(0, network_get_id_outdoor2(network_local_device_get()), 0);
-		video_decode_open(0, DECODE_WIDTH, DECODE_HIGHT); // 640, 360);
+		if (local_video_decode_required)
+			video_decode_open(0, DECODE_WIDTH, DECODE_HIGHT); // 640, 360);
 		network_video_receive_package_open(eth_p_id);
 	}
 	else if (monitor_channel == MON_CH_CCTV_1 && monitor_config_get()->cctv1 != NULL)
@@ -128,7 +134,7 @@ void monitor_open(bool reset)
 		else
 			fb_video_mode_enable(true);
 	}
-	else
+	else if (monitor_background_clear_required(tuya_background_session))
 	{
 		extern bool system_bg_fill_color(unsigned int color, int x, int y, int w, int h);
 		system_bg_fill_color(0x00, 0, 0, 1024, 600);
@@ -256,8 +262,11 @@ void monitor_switch(void)
 #endif
 	}
 
-	extern bool system_bg_fill_color(unsigned int color, int x, int y, int w, int h);
-	system_bg_fill_color(0x00, 0, 0, 1024, 600);
+	if (monitor_background_clear_required(monitor_enter_way_get() == MONITOR_ENTER_TUYA))
+	{
+		extern bool system_bg_fill_color(unsigned int color, int x, int y, int w, int h);
+		system_bg_fill_color(0x00, 0, 0, 1024, 600);
+	}
 	if (monitor_enter_way_get() != MONITOR_ENTER_TUYA)
 	{
 		if (monitor_channel == MON_CH_DOOR_1 || monitor_channel == MON_CH_DOOR_2)
@@ -465,7 +474,8 @@ bool audio_talk_open(audio_talk_ctrl ctrl)
 
 bool audio_talk_close(bool all_close)
 {
-	Debug_Lib("%s <<========================:%d\n", __func__, audiocast);
+	Debug_Lib("[TUYA_AUDIO_TRACE] %s: all_close=%d audiocast=%d status=%d -> close network audio send/receive\n",
+			  __func__, all_close, audiocast, audio_talk_status);
 	// if (audiocast == false)
 	// {
 	// 	Debug_Lib("device audio not talk \n");
@@ -477,6 +487,7 @@ bool audio_talk_close(bool all_close)
 
 	if (all_close)
 	{
+		Debug_Lib("[TUYA_AUDIO_TRACE] %s: close local audio input/decode\n", __func__);
 		audio_input_close();
 		audio_decode_close();
 

@@ -6,6 +6,7 @@
 #include "ak_mem.h"
 
 #include "layout_define.h"
+#include "tuya_session_guard.h"
 #include "leo_api.h"
 #include "user_data.h"
 
@@ -123,7 +124,15 @@ static void ak_eth_reload(void)
 
 void main_device_monitor_busy_func(unsigned long arg1, unsigned long arg2)
 {
-    if (current_layout_get() != &layout_standby && monitor_enter_way_get() != MONITOR_ENTER_TUYA)
+    bool tuya_session_active = tuya_client_num_get() > 0 || monitor_enter_way_get() == MONITOR_ENTER_TUYA;
+
+    if (tuya_session_should_ignore_indoor_busy(tuya_session_active))
+    {
+        Debug("[TUYA_UI_TRACE] main monitor busy event ignored while tuya session is active\n");
+        return;
+    }
+
+    if (current_layout_get() != &layout_standby)
     {
         Debug("\n\n\n\n");
         goto_layout(pLAYOUT(standby));

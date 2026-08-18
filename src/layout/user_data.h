@@ -234,6 +234,7 @@ typedef struct
 } user_data_info;
 
 bool user_data_save(void);
+bool user_data_save_sync(void);
 bool user_data_init(void);
 void ring_init(void);
 

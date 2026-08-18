@@ -11,6 +11,9 @@
 #include "leo_api.h"
 #include "tuya_sdk.h"
 #include "ring_buffer.h"
+#include "video_perf_trace.h"
+
+extern unsigned long long os_get_ms(void);
 
 #ifdef LINK_LIST_ENABLE
 #include "link_list.h"
@@ -34,10 +37,40 @@ static char video_decode_type = 0; // 0:h264 1:mjpeg 2:h265
 
 static ak_mutex_t video_decode_mutex;
 static ring_buffer video_decode_ring_buffer;
+static video_perf_stats video_decode_feed_perf_stats;
+static unsigned long long video_decode_perf_last_trace_ms;
+static unsigned long long video_decode_feed_stall_last_warn_ms;
 
 bool video_normal_falg = false;
 
 bool video_decode_queue_reset(void);
+
+static void video_decode_perf_trace_log(void)
+{
+	unsigned long long now_ms = os_get_ms();
+	ring_buffer_perf_stats queue_stats;
+
+	if ((video_decode_perf_last_trace_ms != 0) &&
+		(now_ms - video_decode_perf_last_trace_ms < 5000))
+	{
+		return;
+	}
+	if (!ring_buffer_perf_stats_snapshot(&video_decode_ring_buffer, &queue_stats, true))
+	{
+		return;
+	}
+
+	printf("[TUYA_PERF_TRACE] decoder: feed calls=%lu bytes=%llu avg=%llums max=%llums slow=%lu fail=%lu zero=%lu busy_loops=%lu | queue current=%d peak=%d writes=%lu bytes=%llu overwrite=%lu overwrite_bytes=%llu\n",
+		   video_decode_feed_perf_stats.calls, video_decode_feed_perf_stats.bytes,
+		   video_decode_feed_perf_stats.calls ? video_decode_feed_perf_stats.total_ms / video_decode_feed_perf_stats.calls : 0,
+		   video_decode_feed_perf_stats.max_ms, video_decode_feed_perf_stats.slow_calls,
+		   video_decode_feed_perf_stats.failures, video_decode_feed_perf_stats.zero_progress,
+		   video_decode_feed_perf_stats.busy_loops, queue_stats.current_bytes, queue_stats.peak_bytes,
+		   queue_stats.writes, queue_stats.written_bytes, queue_stats.overwrites,
+		   queue_stats.overwritten_bytes);
+	video_perf_stats_reset(&video_decode_feed_perf_stats);
+	video_decode_perf_last_trace_ms = now_ms;
+}
 
 #ifdef LINK_LIST_ENABLE
 
@@ -153,6 +186,7 @@ static void video_decode_device_close(void)
 static void video_data_stream_send(unsigned char *pdata, unsigned int len)
 {
 	int dec_len = 0;
+	int send_ret;
 	unsigned int read_len = len;
 	unsigned int send_len = 0;
 
@@ -160,13 +194,33 @@ static void video_data_stream_send(unsigned char *pdata, unsigned int len)
 	unsigned long long x = os_get_ms();
 	while (read_len > 0)
 	{
-		ak_vdec_send_stream(video_decode.handle_id, &pdata[send_len], read_len, NONBLOCK, &dec_len);
+		unsigned long long send_start_ms = os_get_ms();
+		bool zero_progress;
+
+		dec_len = 0;
+		send_ret = ak_vdec_send_stream(video_decode.handle_id, &pdata[send_len], read_len, NONBLOCK, &dec_len);
+		zero_progress = dec_len <= 0;
+		video_perf_stats_record(&video_decode_feed_perf_stats, dec_len > 0 ? dec_len : 0,
+								os_get_ms() - send_start_ms, send_ret, zero_progress,
+								zero_progress ? 1 : 0, 10);
+		if (zero_progress)
+		{
+			unsigned long long now_ms = os_get_ms();
+			if ((video_decode_feed_stall_last_warn_ms == 0) ||
+				(now_ms - video_decode_feed_stall_last_warn_ms >= 1000))
+			{
+				printf("[TUYA_PERF_TRACE] decoder feed stalled: ret=%d dec_len=%d remaining=%u\n",
+					   send_ret, dec_len, read_len);
+				video_decode_feed_stall_last_warn_ms = now_ms;
+			}
+		}
 		read_len -= dec_len;
 		send_len += dec_len;
 	}
 	x = os_get_ms() - x;
 	// if (x > 100)
 	// printf("ring_buffer_read ms=====>>%llu,len:%d\n", x, len);
+	video_decode_perf_trace_log();
 }
 
 // static bool snap = true;
@@ -397,11 +451,6 @@ static ak_pthread_t video_decode_thread = 0;
 bool video_decode_open(char type, int src_width, int src_height)
 {
 	printf("%s============================src_width:%d			src_height:%d\n", __func__, src_width, src_height);
-	if (tuya_client_num_get() > 0)
-	{
-		return false;
-	}
-
 	if (video_decode_run == true)
 	{
 		printf("video decode open after \n");
@@ -425,6 +474,9 @@ bool video_decode_open(char type, int src_width, int src_height)
 
 	video_decode_ready = false;
 	video_decode_run = true;
+	video_perf_stats_reset(&video_decode_feed_perf_stats);
+	video_decode_perf_last_trace_ms = 0;
+	video_decode_feed_stall_last_warn_ms = 0;
 	int ret = ak_thread_create(&video_decode_thread, video_decode_task, NULL, ANYKA_THREAD_NORMAL_STACK_SIZE, -1);
 	printf("[%s,%d] ret = %d\n", __func__, __LINE__, ret);
 
@@ -543,11 +595,5 @@ bool video_decode_queue_reset(void)
 
 bool get_video_data_display_state(void)
 {
-	// extern INT_T tuya_online_clinet_num_get(void);
-	if (tuya_client_num_get() > 0) // tuya监控就不用管状态-这代码的意义
-	{
-		// printf("%s ============================>>%d\n",__func__,__LINE__);
-		return false;
-	}
 	return video_normal_falg;
 }

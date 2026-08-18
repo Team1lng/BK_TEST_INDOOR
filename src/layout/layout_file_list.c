@@ -12,6 +12,18 @@ static bool is_data_list_move = false;
 static lv_obj_t *data_list = NULL;
 static int roll_length = 0;
 
+static bool tuya_file_playback_blocked(void)
+{
+	if ((rec_file_type == FILE_TYPE_SD_CALL || rec_file_type == FILE_TYPE_SD_MSG || rec_file_type == FILE_TYPE_SD_MOTION) &&
+		(tuya_client_num_get() > 0 || tuya_monitor_state_get()))
+	{
+		msgbox_animat_create(text_str(STR_PHONE_MONITORING), 1000);
+		return true;
+	}
+
+	return false;
+}
+
 #define LIST_DISPLAY_MAX 50																																		// 一个列表最多刷新50张卡
 #define LIST_PAD_VER_SIZE 0																																		// 列表垂直填充大小
 #define LIST_BTN_PAD_VER_SIZE 0																																	// 列表按鍵垂直填充大小
@@ -181,6 +193,11 @@ extern lv_obj_t *list_window_btn_create(lv_obj_t *parent, int x, int y, int w, i
 
 static void window_open_file_btn_up(lv_obj_t *obj)
 {
+	if (tuya_file_playback_blocked())
+	{
+		return;
+	}
+
 	if (record_info_get()->file_type == VIDEO_TYPE)
 	{
 		goto_layout(pLAYOUT(video));
@@ -310,6 +327,12 @@ static void data_list_btn_up(lv_obj_t *obj)
 	{
 		return;
 	}
+
+	if (tuya_file_playback_blocked())
+	{
+		return;
+	}
+
 	int index = LIST_CURR_PAGE * LIST_DISPLAY_MAX + obj->obj_id;
 
 	lv_obj_t *cont = lv_obj_get_child_form_id(obj, obj->obj_id);

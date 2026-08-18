@@ -241,4 +241,6 @@ int network_audio_send_task_eth_id(void);
 int network_audio_receive_task_eth_id(void);
 
 void request_send_I_frame_cmd(network_device ch);
+void network_tuya_stream_keepalive_maybe_send(network_device device,
+												unsigned long long now_ms);
 #endif

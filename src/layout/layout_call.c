@@ -1,5 +1,6 @@
 #include "layout_define.h"
 #include "leo_api.h"
+#include "tuya_session_guard.h"
 
 typedef enum call_module_list
 {
@@ -44,6 +45,23 @@ static int call_timer_ms = 0;
 network_device call_num;
 int call_family_id = -1;
 
+static bool call_tuya_session_active(void)
+{
+    return tuya_session_indoor_call_blocked(tuya_client_num_get() > 0,
+                                             tuya_monitor_state_get(),
+                                             monitor_enter_way_get() == MONITOR_ENTER_TUYA,
+                                             tuya_audio_occupied_check());
+}
+
+static void call_busy_reply(network_device device, unsigned long caller_family_id)
+{
+    temp_data.device = device;
+    temp_data.cmd = NET_COMMON_CMD_INTERCOM_CALL;
+    temp_data.arg1 = BUSY_EQUIPMENT;
+    temp_data.arg2 = (char)(user_data_get()->other.family_id) << 4 | (caller_family_id & 0x0F);
+    network_send_cmd_data(&temp_data);
+}
+
 static void ID_display(int ID)
 {
 	lv_obj_t *label = lv_label_create(lv_scr_act(), NULL);
@@ -72,12 +90,32 @@ static void ID_display(int ID)
 
 static void call_out_btn_up(lv_obj_t *obj)
 {
+	int tuya_clients = tuya_client_num_get();
+	bool tuya_monitoring = tuya_monitor_state_get();
+	MONITOR_ENTER_WAY monitor_enter_way = monitor_enter_way_get();
+	bool tuya_talking = tuya_audio_occupied_check();
+	bool tuya_call_blocked = tuya_session_indoor_call_blocked(tuya_clients > 0,
+														tuya_monitoring,
+															monitor_enter_way == MONITOR_ENTER_TUYA,
+															tuya_talking);
+
 	Debug("locat family_id:%d  call_family_id:%d\n", user_data_get()->other.family_id, call_family_id);
+	Debug("[TUYA_CALL_TRACE] call out click: clients=%d monitor_state=%d enter_way=%d tuya_talk=%d blocked=%d\n",
+		  tuya_clients, tuya_monitoring, monitor_enter_way, tuya_talking, tuya_call_blocked);
+	if (tuya_call_blocked)
+	{
+		Debug("[TUYA_CALL_TRACE] call out blocked: keep Tuya video session\n");
+		msgbox_animat_create(text_str(STR_PHONE_MONITORING), 1500);
+		return;
+	}
+
 	temp_data.cmd = NET_COMMON_CMD_INTERCOM_CALL;
 	temp_data.arg1 = CALL_OUT;
 	temp_data.arg2 = (char)(user_data_get()->other.family_id) << 4 | (call_family_id);
 
 	temp_data.device = call_num;
+	Debug("[TUYA_CALL_TRACE] call out send: device=%d cmd=0x%x arg1=%d arg2=0x%x\n",
+		  temp_data.device, temp_data.cmd, temp_data.arg1, (unsigned char)temp_data.arg2);
 	network_send_cmd_data(&temp_data);
 	call_status = INTERPHONE_STATUS_PUBLISH;
 	call_timer_start_ms = os_get_ms();
@@ -141,6 +179,10 @@ static void call_in_hand_up_btn_create(Controls_location coordinate)
 
 static void call_in_answer_btn_up(lv_obj_t *obj)
 {
+	/* tuya 监控或通话中，禁止室内机接听，弹窗 busy */
+	if (tuya_audio_occupied_check())
+		return;
+
 	temp_data.device = call_num;
 	temp_data.cmd = NET_COMMON_CMD_INTERCOM_CALL;
 	temp_data.arg1 = ANSWER_CALL;
@@ -451,6 +493,13 @@ static void call_event_extern_func(unsigned long arg1, unsigned long arg2)
 	{
 		if (call_status == INTERPHONE_STATUS_IDLE)
 		{
+			if (call_tuya_session_active())
+			{
+				call_busy_reply(device, arg2);
+				return;
+			}
+			if (tuya_audio_occupied_check())
+				return;
 			call_num = device;
 			call_family_id = arg2 >> 4;
 			Debug("call_family_id:%d\n", call_family_id);
@@ -480,6 +529,13 @@ static void call_event_inside_func(unsigned long arg1, unsigned long arg2)
 	{
 		if (call_status == INTERPHONE_STATUS_IDLE)
 		{
+			if (call_tuya_session_active())
+			{
+				call_busy_reply(device, arg2);
+				return;
+			}
+			if (tuya_audio_occupied_check())
+				return;
 			call_num = device;
 			call_family_id = arg2 >> 4;
 			Debug("call_family_id:%d\n", call_family_id);
@@ -585,6 +641,7 @@ static void call_event_inside_func(unsigned long arg1, unsigned long arg2)
 			network_send_cmd_data(&temp_data);
 
 			goto_layout(pLAYOUT(standby));
+			msgbox_animat_create(text_str(STR_DEVICE_BUSY), 1500);
 		}
 	}
 	else if (arg1 == HANG_UP_OTHER) // 设备繁忙

@@ -1,5 +1,6 @@
 #include "layout_define.h"
 #include "leo_api.h"
+#include "tuya_session_guard.h"
 
 extern bool wifi_control;
 static void monitor_Lock_1_btn_up(lv_obj_t *obj);
@@ -34,12 +35,18 @@ typedef enum monitor_module_list
 bool get_outdoor_talk_state(MONITOR_CH ch);
 extern bool is_talking; // 正在接听
 static bool is_tuya_talking = false;
+static bool monitor_background_ui_exit = false;
 extern void network_event_register(event_pro_callback handle);
 static int is_tuya_enter;
 
 static bool is_talked; // 接听过
 static bool record_message_ing = false;
 static lv_task_t *montior_talk_task_t = NULL;
+
+bool tuya_talk_active_get(void)
+{
+	return is_tuya_talking;
+}
 static void monitor_enter_ui_different_processing(void);
 static void monitor_record_label_display(bool is_record_video, bool hide);
 
@@ -90,6 +97,31 @@ static void monitor_timer_set(__int32_t time)
 bool is_monitor_talked(void)
 {
 	return is_talked;
+}
+
+void monitor_background_ui_exit_request(void)
+{
+	monitor_background_ui_exit = true;
+}
+
+static void monitor_tuya_background_session_close(void)
+{
+	Debug("[TUYA_AUDIO_TRACE] tuya background close: channel=%d enter_way=%d clients=%d tuya_talk=%d local_talk=%d\n",
+		  monitor_channel_get(), monitor_enter_way_get(), tuya_client_num_get(), is_tuya_talking, is_talking);
+	Debug("[TUYA_AUDIO_TRACE] tuya background close -> audio_talk_close(true)\n");
+	audio_talk_close(true);
+	if (is_tuya_talking || is_talking)
+	{
+		Debug("[TUYA_AUDIO_TRACE] tuya background close -> send_monitor_talk_cmd(false)\n");
+		send_monitor_talk_cmd(false);
+	}
+
+	is_talking = false;
+	is_talked = false;
+	is_tuya_talking = false;
+	record_message_ing = false;
+	monitor_channel_set(MON_CH_NONE);
+	monitor_enter_way_set(MONITOR_ENTER_NONE);
 }
 
 static void monitor_video_mode_open(bool fb_video_enable)
@@ -235,6 +267,8 @@ static void monitor_timer_task(struct _lv_task_t *task_t)
 
 		if (monitor_timeout_val == 0)
 		{
+			Debug("[TUYA_AUDIO_TRACE] monitor timeout -> standby: channel=%d enter_way=%d clients=%d tuya_talk=%d local_talk=%d\n",
+				  monitor_channel_get(), monitor_enter_way_get(), tuya_client_num_get(), is_tuya_talking, is_talking);
 			record_video_stop(0x00); // 停止录像
 			goto_layout(pLAYOUT(standby));
 		}
@@ -340,6 +374,11 @@ static void monitor_indoor_cmd_func(unsigned long arg1, unsigned long arg2)
 		break;
 	case 2: /*设备正忙，in device与 out device 通话*/
 	{
+		if (tuya_session_should_ignore_indoor_busy(monitor_enter_way_get() == MONITOR_ENTER_TUYA))
+		{
+			break;
+		}
+
 		if (montior_talk_task_t != NULL)
 		{
 			/* 删除预通话任务*/
@@ -459,8 +498,21 @@ void tuya_event_inside_proc(unsigned long arg1, unsigned long arg2)
 	case TUYA_EVENT_TALK:
 		if (arg2 == true)
 		{
+			if (is_tuya_talking)
+			{
+				Debug("=======>>TUYA_EVENT_TALK already started\n\n\n");
+				break;
+			}
+
 			MONITOR_CH monitor_ch = monitor_channel_get();
 			Debug("=======>>TUYA_EVENT_TALK CH:%d\n\n\n", monitor_ch);
+			/* 室内机本地监控或通话中，拒绝涂鸦对讲，SDK自动返回占线(TRANS_EVENT_SPEAKER_ISUSED) */
+			if ((monitor_enter_way_get() != MONITOR_ENTER_NONE && monitor_enter_way_get() != MONITOR_ENTER_TUYA) ||
+				interphone_status != INTERPHONE_STATUS_IDLE)
+			{
+				Debug("=== indoor busy, reject tuya talk ===\n");
+				break;
+			}
 			if (monitor_ch < MON_CH_CCTV_1)
 			{
 				network_device devcie = monitor_ch == MON_CH_DOOR_1 ? DEVICE_OUTDOOR_1 : DEVICE_OUTDOOR_2;
@@ -471,80 +523,31 @@ void tuya_event_inside_proc(unsigned long arg1, unsigned long arg2)
 				is_tuya_talking = true;
 			}
 		}
-		// else
-		// {
-		// 	send_monitor_talk_cmd(false);
-		// 	is_talking = false;
-		// 	is_tuya_talking = false;
-		// }
+		else if (is_tuya_talking)
+		{
+			Debug("=======>>TUYA_EVENT_TALK stop\n\n\n");
+			send_monitor_talk_cmd(false);
+			is_talking = false;
+			is_tuya_talking = false;
+		}
 		break;
 		/*进入监控*/
 	case TUYA_EVENT_MONITOR_ENTER:
 		/*Don't do anything*/
 		{
-			Debug("TUYA_EVENT_MONITOR_ENTER ====================+>>>>\n\n\n");
-			if (device_online_state_get(monitor_channel_get() + DEVICE_INDOOR_ID6) == false)
-			{
-				audio_talk_close(false);
-
-				for (int ch = DEVICE_OUTDOOR_1; ch < DEVICE_END; ch++)
-				{
-					if (device_online_state_get(ch))
-					{
-
-						monitor_channel_set(MON_CH_DOOR_1 + ch - DEVICE_OUTDOOR_1);
-						break;
-					}
-				}
-
-				monitor_switch(); // monitor_open(true);//
-								  // break;
-			}
-
-			monitor_enter_way_set(MONITOR_ENTER_TUYA);
+			Debug("[TUYA_UI_TRACE] monitor inside enter: enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
+				  monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
+			// 室内机本地监控已持有视频管道时，保留本地状态并复用同一帧给涂鸦上传。
 			is_tuya_enter = 1;
-			// send_monitor_talk_cmd(true);
-			record_video_stop(0x00);
 			tuya_channel_valid_report();
-			monitor_enter_ui_different_processing();
 			monitor_channel_label_display();
-
-			MONITOR_CH monitor_ch = monitor_channel_get();
-			network_device devcie = monitor_ch + DEVICE_INDOOR_ID6;
-			if (monitor_ch != MON_CH_CCTV_1 && monitor_ch != MON_CH_CCTV_2)
-			{
-				audio_talk_ctrl ctrl = {{devcie}, (OPERATION_OPTION(AUDIO_SEND_EN) | OPERATION_OPTION(AUDIO_RECEIVE_EN)), AI_AO_C, true, false, monitor_ch == MON_CH_DOOR_1 ? user_data_get()->door1.talk_volume * 5 + 46 : user_data_get()->door2.talk_volume * 5 + 46};
-				audio_talk_open(ctrl);
-			}
-
-			if (monitor_ring_time_ptask != NULL)
-			{
-				lv_task_del(monitor_ring_time_ptask);
-				monitor_ring_time_ptask = NULL;
-			}
-			monitor_ring_timeout_val = 0;
-			audio_play_stop_set();
-			while (video_decode_data_status() != true)
-			{
-				// Debug("video_decode_data_status\n");
-				if (get_video_decode_state() == false)
-					break;
-			};
-			video_raw_clear();
-			fb_video_mode_enable(false);
 		}
 		break;
 		/*退出监控*/
 	case TUYA_EVENT_MONITOR_QUIT:
-	{
-		// if(monitor_tuya_exit_task_t == NULL)
-		// 	monitor_tuya_exit_task_t = lv_task_create(monitor_tuya_exit_task, 500, LV_TASK_PRIO_HIGH, NULL);
-
-		send_monitor_hang_cmd();
-		monitor_channel_set(MON_CH_NONE);
-		goto_layout(pLAYOUT(standby));
-	}
-	break;
+		// 手机退出只结束涂鸦会话，不能挂断室内机仍在进行的本地监控。
+		is_tuya_enter = 0;
+		break;
 	/* 截屏 */
 	case TUYA_EVENT_SCREENSHOT:
 	{
@@ -556,7 +559,7 @@ void tuya_event_inside_proc(unsigned long arg1, unsigned long arg2)
 
 	case TUYA_EVENT_MONITOR_ING:
 	{
-		if (current_layout_get() != &layout_standby && monitor_enter_way_get() != MONITOR_ENTER_TUYA)
+		if (current_layout_get() != &layout_standby && current_layout_get() != &layout_monitor && monitor_enter_way_get() != MONITOR_ENTER_TUYA)
 		{
 			goto_layout(pLAYOUT(standby));
 		}
@@ -618,11 +621,38 @@ void tuya_event_extern_proc(unsigned long arg1, unsigned long arg2)
 		break;
 		/*通话*/
 	case TUYA_EVENT_TALK:
-		send_monitor_talk_cmd(true);
+		if (arg2 == true)
+		{
+			if (is_tuya_talking)
+			{
+				Debug("=======>>TUYA_EVENT_TALK already started\n\n\n");
+				break;
+			}
+
+			/* 室内机本地监控或通话中，拒绝涂鸦对讲，SDK自动返回占线(TRANS_EVENT_SPEAKER_ISUSED) */
+			if ((monitor_enter_way_get() != MONITOR_ENTER_NONE && monitor_enter_way_get() != MONITOR_ENTER_TUYA) ||
+				interphone_status != INTERPHONE_STATUS_IDLE)
+			{
+				Debug("=== indoor busy, reject tuya talk ===\n");
+				break;
+			}
+
+			send_monitor_talk_cmd(true);
+			is_tuya_talking = true;
+		}
+		else if (is_tuya_talking)
+		{
+			Debug("=======>>TUYA_EVENT_TALK stop\n\n\n");
+			send_monitor_talk_cmd(false);
+			is_talking = false;
+			is_tuya_talking = false;
+		}
 		break;
 		/*进入监控*/
 	case TUYA_EVENT_MONITOR_ENTER:
 	{
+		Debug("[TUYA_UI_TRACE] monitor extern enter before setup: channel=%d enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
+			  monitor_channel_get(), monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
 		is_tuya_enter = 1;
 		monitor_channel_set(MON_CH_DOOR_1);
 		for (int ch = DEVICE_OUTDOOR_1; ch < DEVICE_END; ch++)
@@ -635,22 +665,42 @@ void tuya_event_extern_proc(unsigned long arg1, unsigned long arg2)
 		}
 		Debug("TUYA_EVENT_MONITOR_ENTER ====================+>>>>%d\n\n\n", monitor_channel_get());
 		tuya_channel_valid_report();
-		monitor_enter_way_set(MONITOR_ENTER_TUYA);
-		goto_layout(pLAYOUT(monitor));
 
-		MONITOR_CH monitor_ch = monitor_channel_get();
-		Debug("TUYA_EVENT_MONITOR_ENTER ====================+>>>>%d\n\n\n", monitor_ch);
-		network_device devcie = monitor_ch == MON_CH_DOOR_1 ? DEVICE_OUTDOOR_1 : DEVICE_OUTDOOR_2;
-		audio_talk_ctrl ctrl = {{devcie}, (OPERATION_OPTION(AUDIO_SEND_EN) | OPERATION_OPTION(AUDIO_RECEIVE_EN)), AI_AO_C, true, false, monitor_ch == MON_CH_DOOR_1 ? user_data_get()->door1.talk_volume * 5 + 46 : user_data_get()->door2.talk_volume * 5 + 46};
-		audio_talk_open(ctrl);
+		// 手机端进入涂鸦监控时，室内机不跳转到监控界面，仅搭建视频/音频管道
+		{
+			MONITOR_CH monitor_ch = monitor_channel_get();
+			network_device devcie = monitor_ch == MON_CH_DOOR_1 ? DEVICE_OUTDOOR_1 : DEVICE_OUTDOOR_2;
 
-		fb_video_mode_enable(false);
-		// send_monitor_talk_cmd(true);
+			// 门口机正在通话时不打开音频，手机端涂鸦会显示占线(TRANS_EVENT_SPEAKER_ISUSED)
+			if (!get_outdoor_talk_state(MON_CH_DOOR_1) && !get_outdoor_talk_state(MON_CH_DOOR_2))
+			{
+				audio_talk_ctrl ctrl = {{devcie}, (OPERATION_OPTION(AUDIO_SEND_EN) | OPERATION_OPTION(AUDIO_RECEIVE_EN)), AI_AO_C, true, false, monitor_ch == MON_CH_DOOR_1 ? user_data_get()->door1.talk_volume * 5 + 46 : user_data_get()->door2.talk_volume * 5 + 46};
+				audio_talk_open(ctrl);
+			}
+			else
+			{
+				Debug("=== outdoor is talking, skip audio for tuya ===\n");
+			}
+
+			extern void video_raw_clear(void);
+			video_raw_clear();
+			monitor_enter_way_set(MONITOR_ENTER_TUYA);
+			monitor_open(false);  // 涂鸦后台仅打开门口机接收与Tuya上传管道，不启动本地解码
+			fb_video_mode_enable(false);
+			Debug("[TUYA_UI_TRACE] monitor extern enter after setup: channel=%d enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
+				  monitor_channel_get(), monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
+		}
 	}
 	break;
 		/*退出监控*/
 	case TUYA_EVENT_MONITOR_QUIT:
-		/*Don't do anything*/
+		Debug("[TUYA_UI_TRACE] monitor extern quit: channel=%d enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
+			  monitor_channel_get(), monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
+		monitor_tuya_background_session_close();
+		// if (current_layout_get() == &layout_monitor)
+		// {
+		// 	goto_layout(pLAYOUT(standby));
+		// }
 		break;
 	/* 截屏 */
 	case TUYA_EVENT_SCREENSHOT:
@@ -661,7 +711,7 @@ void tuya_event_extern_proc(unsigned long arg1, unsigned long arg2)
 	}
 	case TUYA_EVENT_MONITOR_ING:
 	{
-		if (current_layout_get() != &layout_standby && monitor_enter_way_get() != MONITOR_ENTER_TUYA)
+		if (current_layout_get() != &layout_standby && current_layout_get() != &layout_monitor && monitor_enter_way_get() != MONITOR_ENTER_TUYA)
 		{
 			goto_layout(pLAYOUT(standby));
 		}
@@ -1550,9 +1600,23 @@ static void monitor_talk_image_display(bool is_talking)
 	lv_obj_set_style_local_pattern_image(btn, LV_OBJ_PART_MAIN, LV_STATE_PRESSED, is_talking ? &info1 : &info3);
 	lv_obj_set_style_local_pattern_image(btn, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT, is_talking ? &info : &info2);
 }
+
+static void monitor_tuya_busy_msgbox_create(void)
+{
+	lv_obj_t *msg = msgbox_animat_create(text_str(STR_PHONE_MONITORING), 1000);
+	lv_obj_set_pos(msg, 350, 187);
+	lv_obj_set_size(msg, 324, 226);
+}
+
 static void monitor_talk_btn_up(lv_obj_t *obj)
 {
 	Debug("===========================>>ch:%d   is_talking: %d\n", monitor_channel_get(), is_talking);
+	if (tuya_client_num_get() > 0 || tuya_monitor_state_get())
+	{
+		monitor_tuya_busy_msgbox_create();
+		return;
+	}
+
 	monitor_click_up(NULL);
 	if (is_talking == false) // 未通话
 	{
@@ -1987,6 +2051,8 @@ static void monitor_enter_ui_different_processing(void)
 
 static void monitor_click_up(lv_obj_t *obj)
 {
+	Debug("[TUYA_UI_TRACE] monitor screen touch: enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
+		  monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
 	if (monitor_setting_window_flag)
 	{
 		lv_obj_t *window_cont = lv_obj_get_child_form_id(lv_scr_act(), 888);
@@ -2169,6 +2235,16 @@ static void tuya_call_func(lv_task_t *task)
 
 static void device_monitor_busy_func(unsigned long arg1, unsigned long arg2)
 {
+	bool tuya_session_active = tuya_client_num_get() > 0 || monitor_enter_way_get() == MONITOR_ENTER_TUYA;
+
+	Debug("[TUYA_UI_TRACE] monitor busy event: enter_way=%d clients=%d tuya_session=%d local_talk=%d\n",
+		  monitor_enter_way_get(), tuya_client_num_get(), tuya_session_active, is_talking);
+	if (tuya_session_should_ignore_indoor_busy(tuya_session_active))
+	{
+		Debug("[TUYA_UI_TRACE] monitor busy event ignored while tuya session is active\n");
+		return;
+	}
+
 	if (current_layout_get() != &layout_standby && monitor_enter_way_get() != MONITOR_ENTER_TUYA && !is_talking)
 	{
 		goto_layout(pLAYOUT(standby));
@@ -2282,7 +2358,63 @@ static void LAYOUT_ENETER_FUNC(monitor)
 
 static void LAYOUT_QUIT_FUNC(monitor)
 {
-	Debug("============================>>>\n");
+	bool tuya_client_active = tuya_client_num_get() > 0;
+	bool keep_tuya_video = tuya_session_keep_shared_video(tuya_client_active);
+	bool keep_tuya_audio = tuya_session_keep_shared_media(
+		tuya_client_active,
+		monitor_enter_way_get() == MONITOR_ENTER_TUYA);
+
+	Debug("[TUYA_AUDIO_TRACE] monitor layout quit: background_exit=%d channel=%d enter_way=%d clients=%d tuya_talk=%d local_talk=%d\n",
+		  monitor_background_ui_exit, monitor_channel_get(), monitor_enter_way_get(), tuya_client_num_get(), is_tuya_talking, is_talking);
+	if (monitor_background_ui_exit)
+	{
+		monitor_background_ui_exit = false;
+
+		if (monitor_time_ptask != NULL)
+		{
+			lv_task_del(monitor_time_ptask);
+			monitor_time_ptask = NULL;
+		}
+		if (monitor_timer_ptask != NULL)
+		{
+			lv_task_del(monitor_timer_ptask);
+			monitor_timer_ptask = NULL;
+		}
+		if (montior_talk_task_t != NULL)
+		{
+			lv_task_del(montior_talk_task_t);
+			montior_talk_task_t = NULL;
+		}
+		if (monitor_ring_time_ptask != NULL)
+		{
+			lv_task_del(monitor_ring_time_ptask);
+			monitor_ring_time_ptask = NULL;
+		}
+		if (monitor_chime_ptask != NULL)
+		{
+			lv_task_del(monitor_chime_ptask);
+			monitor_chime_ptask = NULL;
+			chime_gpio_disable();
+		}
+		if (auto_record_task_t != NULL)
+		{
+			lv_task_del(auto_record_task_t);
+			auto_record_task_t = NULL;
+		}
+		if (record_message_task_t != NULL)
+		{
+			lv_task_del(record_message_task_t);
+			record_message_task_t = NULL;
+		}
+		record_video_stop(0x00);
+		record_message_ing = false;
+
+		layout_is_monitor = 0;
+		lv_obj_set_click(lv_scr_act(), false);
+		tuya_event_register(tuya_event_extern_proc);
+		return;
+	}
+
 	tuya_cloud_storage_stop();
 	extern void main_device_monitor_busy_func(unsigned long arg1, unsigned long arg2);
 	device_monitor_busy_register(main_device_monitor_busy_func);
@@ -2293,7 +2425,17 @@ static void LAYOUT_QUIT_FUNC(monitor)
 
 	monitor_light_control(false); // 确保灯光关闭
 
-	monitor_video_mode_close(); // 监控和声音关闭
+	if (keep_tuya_video)
+	{
+		Debug("[TUYA_AUDIO_TRACE] monitor layout quit: preserve tuya video path only\n");
+		// 室内机退出监控页时，保留门口机接收通道供手机涂鸦继续取流。
+		fb_video_mode_enable(false);
+		video_decode_close();
+	}
+	else
+	{
+		monitor_video_mode_close(); // 监控和声音关闭
+	}
 
 	if (sdcard_insert_msg_box != NULL)
 	{
@@ -2369,15 +2511,25 @@ static void LAYOUT_QUIT_FUNC(monitor)
 
 	is_monitor_call = false;
 
-	audio_talk_close(true); // 音频关闭
-	if (is_tuya_talking || is_talking)
+	if (keep_tuya_audio)
 	{
-		send_monitor_talk_cmd(false);
+		Debug("[TUYA_AUDIO_TRACE] monitor layout quit: preserve tuya audio, skip audio close and hang command\n");
+	}
+	else
+	{
+		Debug("[TUYA_AUDIO_TRACE] monitor layout quit -> audio_talk_close(true): clients=%d tuya_talk=%d local_talk=%d\n",
+			  tuya_client_num_get(), is_tuya_talking, is_talking);
+		audio_talk_close(true); // 音频关闭
+		if (is_tuya_talking || is_talking)
+		{
+			Debug("[TUYA_AUDIO_TRACE] monitor layout quit -> send_monitor_talk_cmd(false)\n");
+			send_monitor_talk_cmd(false);
+		}
+		is_tuya_talking = false;
 	}
 
 	is_talking = false;
 	is_talked = false;
-	is_tuya_talking = false;
 	record_message_ing = false;
 	outdoor_order_set(NET_COMMON_CMD_NONE);
 	monitor_call_label_display(MON_CH_NONE, MON_CH_NONE);

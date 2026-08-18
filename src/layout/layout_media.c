@@ -54,6 +54,8 @@ static void media_movie_btn_create(Controls_location coordinate)
 
 static void media_music_btn_up(lv_obj_t *obj)
 {
+	if (tuya_audio_occupied_check())
+		return;
 	goto_layout(pLAYOUT(music_list));
 }
 

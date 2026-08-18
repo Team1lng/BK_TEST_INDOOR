@@ -5,7 +5,9 @@
 
 extern lv_obj_t *setting_btn_create(int x, int y, int w, int h, btn_data *btn_pdata, const void *img_src, bool bg_color);
 extern void setting_btn_state_set(lv_obj_t *obj, lv_state_t state);
-extern int wifi_connection_status_sucess(void);
+extern bool wifi_connection_check_start(void);
+extern int wifi_connection_check_state(void);
+extern void wifi_connection_check_cancel(void);
 
 extern lv_obj_t *input_textarea_create(lv_obj_t *parent, int x, int y, int w, int h, int max_length, bool pwd_mode, const char *txt);
 extern const char *get_addwifi_name(void);
@@ -155,6 +157,7 @@ static void close_wifi_connect(void)
 	if (connect_falge)
 	{
 		connect_falge = false;
+		wifi_connection_check_cancel();
 		system("killall wpa_supplicant");
 		system("killall udhcpc");
 
@@ -174,12 +177,11 @@ static void msg_task(struct _lv_task_t *task_t)
 		if (task_timer <= 12)
 		{
 			task_timer++;
-			int connect_ret = wifi_connection_status_sucess();
-			if (connect_ret == 1 && (task_timer > 3))
+			int connect_ret = wifi_connection_check_state();
+			if (connect_ret == WIFI_CONNECTION_CHECK_SUCCESS && (task_timer > 3))
 			{ // 连接成功
+				connect_falge = false;
 				task_timer = 0;
-				system("\\cp -rf /tmp/wpa_supplicant.conf " WPA_SUPPLICANT_PATH " &");
-				system("sync");
 				user_data_get()->wifi.wifi_connect_flag = true;
 				user_data_save();
 				goto_layout(pLAYOUT(setting_wifi));
@@ -187,21 +189,12 @@ static void msg_task(struct _lv_task_t *task_t)
 				set_msg_text(msg1, CONNECT_SUCCESS);
 			}
 		}
-		else
+		else if (wifi_connection_check_state() == WIFI_CONNECTION_CHECK_FAIL || task_timer > 30)
 		{ // 连接失败
 			Debug("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&\n");
 			connect_falge = false;
+			wifi_connection_check_cancel();
 			task_timer = 0;
-
-			system("killall wpa_supplicant");
-			system("killall udhcpc");
-
-			system("rm -rf /tmp/wpa_supplicant.conf &");
-
-			char cmd[128] = {0};
-			snprintf(cmd, sizeof(cmd), "wpa_supplicant -Dnl80211 -i wlan0 -c %s -B &", WPA_SUPPLICANT_PATH);
-			system(cmd);
-			system("udhcpc -i wlan0 -n 4 -R &");
 
 			goto_layout(pLAYOUT(setting_wifi));
 			lv_obj_t *msg1 = connect_wifi_cb();
@@ -470,7 +463,8 @@ static void cancel_wifi_btn_up(lv_obj_t *obj)
 
 static void wpa_cli_connect_task(struct _lv_task_t *task_t)
 {
-	wpa_cli_connect_new_wifi(addwifi_name, strlen(addwifi_pwd) == 0 ? NULL : addwifi_pwd);
+		wpa_cli_connect_new_wifi(addwifi_name, strlen(addwifi_pwd) == 0 ? NULL : addwifi_pwd);
+		wifi_connection_check_start();
 	if (wifi_link_task)
 	{
 		lv_task_del(wifi_link_task);

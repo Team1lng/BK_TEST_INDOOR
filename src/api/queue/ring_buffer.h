@@ -15,6 +15,16 @@
 
 typedef struct
 {
+	int current_bytes;
+	int peak_bytes;
+	unsigned long writes;
+	unsigned long overwrites;
+	unsigned long long written_bytes;
+	unsigned long long overwritten_bytes;
+} ring_buffer_perf_stats;
+
+typedef struct
+{
 	char *head;
 	char *tail;
 
@@ -27,6 +37,12 @@ typedef struct
 	ak_mutex_t *mutex;
 
 	ak_cond_t cond;
+
+	unsigned long perf_writes;
+	unsigned long perf_overwrites;
+	unsigned long long perf_written_bytes;
+	unsigned long long perf_overwritten_bytes;
+	int perf_peak_cache_len;
 } ring_buffer;
 
 bool ring_buffer_init(ring_buffer *ring, int size, ak_mutex_t *mutex);
@@ -36,5 +52,9 @@ bool ring_buffer_write(ring_buffer *ring, char *data, int size);
 int ring_buffer_read(ring_buffer *ring, char *data, int size);
 
 bool ring_buffer_release(ring_buffer *ring);
+
+bool ring_buffer_perf_stats_snapshot(ring_buffer *ring,
+								ring_buffer_perf_stats *stats,
+								bool reset_interval);
 
 #endif

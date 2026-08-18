@@ -23,6 +23,27 @@ typedef struct
 xls_info_t xls_info = {false, 0, 0, 0};
 
 char *** buffer = NULL;
+
+static int lang_xls_effective_column_total_get(xlsWorkSheet *worksheet)
+{
+    int column_index;
+    int row_index;
+
+    for (column_index = worksheet->rows.lastcol - 1; column_index >= 0; --column_index)
+    {
+        for (row_index = 0; row_index <= worksheet->rows.lastrow; ++row_index)
+        {
+            xlsCell *cell = xls_cell(worksheet, row_index, column_index);
+
+            if (cell != NULL && cell->str != NULL && ((char *)cell->str)[0] != '\0')
+            {
+                return column_index + 1;
+            }
+        }
+    }
+
+    return 0;
+}
 /*******************************************************************
  * @brief  : 初始化xls文件，加载语言字符串至内存
  * @return  {char ***} NULL：初始化失败  buffer地址：初始化成功，返回动态申请的三维字符数组
@@ -43,8 +64,9 @@ char *** lang_xls_init(int sheet_num)
     pWs = xls_getWorkSheet(pWb, sheet_num);//pWs指向第 sheet_num 个 Sheet
     xls_parseWorkSheet(pWs);
 
+    xls_info.xls_null_str_num = 0;
     xls_info.row_total = pWs->rows.lastrow + 1;
-    xls_info.col_total = pWs->rows.lastcol;
+    xls_info.col_total = lang_xls_effective_column_total_get(pWs);
 
     printf("===========================>>> 行数: %d   列数: %d \n", xls_info.row_total, xls_info.col_total);
     
@@ -138,5 +160,4 @@ char ***lang_xls_a_row_str_get(int index)
 {
     return &buffer[index];
 }
-
 

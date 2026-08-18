@@ -558,14 +558,17 @@ static void *network_video_receive_package_task(void *arg)
 	receive_frame_push = false;
 
 	int receive_eth_id = *((int *)arg);
+	network_device video_source_device;
 	network_video_receive_eth_id = receive_eth_id;
 	extern void request_send_I_frame_cmd(network_device ch);
 	if (network_common_socket_eth_p_get(0, network_get_id_outdoor1(network_local_device_get()), 0) == network_video_receive_eth_id)
 	{
+		video_source_device = DEVICE_OUTDOOR_1;
 		request_send_I_frame_cmd(DEVICE_OUTDOOR_1);
 	}
 	else
 	{
+		video_source_device = DEVICE_OUTDOOR_2;
 		request_send_I_frame_cmd(DEVICE_OUTDOOR_2);
 	}
 	network_video_receive_socket_open(receive_eth_id);
@@ -581,6 +584,17 @@ static void *network_video_receive_package_task(void *arg)
 	bool frist_receive_i_frame = false;
 	bool frist_tuya_i_frame = false;
 	int send_tuya_frame_count = 0;
+	unsigned long long tuya_video_trace_last_ms = 0;
+	unsigned long long video_ingress_trace_last_ms = 0;
+	unsigned long long last_video_packet_ms = 0;
+	unsigned long select_ready_count = 0;
+	unsigned long select_timeout_count = 0;
+	unsigned long select_error_count = 0;
+	unsigned long receive_packet_count = 0;
+	unsigned long receive_byte_count = 0;
+	unsigned long frame_header_count = 0;
+	unsigned long frame_complete_count = 0;
+	unsigned long frame_drop_count = 0;
 
 	record_data_node node;
 
@@ -607,6 +621,8 @@ static void *network_video_receive_package_task(void *arg)
 		timeout.tv_usec = 100 * 1000; // 5000;
 		/*设置select等待的最大时间 检测集合read中的句柄是否有可读信息*/
 		int ret_select = select(video_package_receive_fd + 1, &readfds, NULL, NULL, &timeout);
+		unsigned long long trace_now_ms = os_get_ms();
+		network_tuya_stream_keepalive_maybe_send(video_source_device, trace_now_ms);
 
 		// int tuya_record_status = tuya_ipc_ss_get_status();
 // printf("-----------------------%d:%d \n",ss_start_event,monitor_enter_way_get());
@@ -668,6 +684,7 @@ static void *network_video_receive_package_task(void *arg)
 
 		if (ret_select > 0)
 		{
+			select_ready_count++;
 			/*如果这个被监视端句柄真的变为可读了*/
 			if (FD_ISSET(video_package_receive_fd, &readfds))
 			{
@@ -676,12 +693,16 @@ static void *network_video_receive_package_task(void *arg)
 
 				if (ret > 0)
 				{
+					receive_packet_count++;
+					receive_byte_count += ret;
+					last_video_packet_ms = trace_now_ms;
 					buf_ptr = &buffer[0];
 					// ret -= 60;
 					while (ret > 0)
 					{
 						if (memcmp(buf_ptr, video_start_code, 4) == 0)
 						{
+							frame_header_count++;
 							receive_frame_count = 0;
 
 							node.len = (buf_ptr[4] << 24) | (buf_ptr[5] << 16) | (buf_ptr[6] << 8) | buf_ptr[7];
@@ -716,6 +737,7 @@ static void *network_video_receive_package_task(void *arg)
 							ret -= 17;
 							if ((ret <= 0) || (node.len > VIDEO_FRAME_MAX) || (frist_receive_i_frame == false)) /* */
 							{
+								frame_drop_count++;
 								receive_frame_start = false;
 							}
 							else
@@ -733,8 +755,9 @@ static void *network_video_receive_package_task(void *arg)
 								memcpy(&node.data[receive_frame_count], buf_ptr, ret);
 								receive_frame_count += ret;
 								ret = 0;
-								if (receive_frame_count == node.len)
-								{
+									if (receive_frame_count == node.len)
+									{
+										frame_complete_count++;
 									receive_frame_start = false;
 
 									int frame_type = h264_is_keyframe((const unsigned char *)(node.data + 4), node.len - 4) ? 1 : 0;
@@ -744,7 +767,8 @@ static void *network_video_receive_package_task(void *arg)
 									// 	x = os_get_ms() ;
 									if (/* tuya_record_status != E_STORAGE_STOP ||  */ (tuya_online_status_get() == true && (tuya_client_num_get() > 0 || monitor_enter_way_get() == MONITOR_ENTER_MONTION || monitor_enter_way_get() == MONITOR_ENTER_CALL)))
 									{
-										if (!tuya_monitor_state_get() && networK_video_receive_task_run)
+										/* 室内机与手机端可同时推流，涂鸦端始终显示真实视频，不再上传占线白屏 */
+										if (networK_video_receive_task_run)
 										{
 											if (frist_tuya_i_frame == false && frame_type == 1)
 											{
@@ -766,27 +790,26 @@ static void *network_video_receive_package_task(void *arg)
 												tuya_upload_disable();
 											}
 
-#if 1
-											if (frist_tuya_i_frame)
-											{
-												send_tuya_frame_count++;
-												tuya_realtime_video_put_frame(node.data, node.len, os_get_ms());
-											}
-#else
-
-											extern void tuya_blank_screen_upload(MEDIA_FRAME_TYPE_E type);
-											tuya_blank_screen_upload(h264_is_keyframe((const unsigned char *)(node.data + 4), node.len - 4) ? E_VIDEO_I_FRAME : E_VIDEO_PB_FRAME);
-#endif
-										}
-										else
+										if (frist_tuya_i_frame)
 										{
-											// Debug_Lib(":%d ,%lld ms\n",tuya_ipc_ss_get_status(),os_get_ms());
-											extern void tuya_occupted_upload(void);
-											tuya_occupted_upload();
+											unsigned long long tuya_video_pts = os_get_ms();
+											int tuya_put_ret;
+
+											send_tuya_frame_count++;
+											tuya_put_ret = tuya_realtime_video_put_frame(node.data, node.len, tuya_video_pts);
+											if ((tuya_video_trace_last_ms == 0) ||
+												(tuya_video_pts - tuya_video_trace_last_ms >= 5000))
+											{
+												Debug_Lib("[TUYA_VIDEO_TRACE] source -> ring: index=%lu size=%d key=%d nal=%u sent=%d clients=%d ret=%d\n",
+													  receive_video_index, node.len, frame_type, node.data[4] & 0x1f,
+													  send_tuya_frame_count, tuya_client_num_get(), tuya_put_ret);
+												tuya_video_trace_last_ms = tuya_video_pts;
+											}
+										}
 										}
 									}
 
-									if ((tuya_client_num_get() <= 0) && networK_video_receive_task_run)
+									if (networK_video_receive_task_run && get_video_decode_state())
 									{
 // printf("==================================================>>>>>:%d :%d\n",node.len - 4,node.is_video);
 #ifdef LINK_LIST_ENABLE
@@ -802,9 +825,10 @@ static void *network_video_receive_package_task(void *arg)
 									ak_sleep_ms(1);
 								}
 							}
-							else
-							{
-								frist_receive_i_frame = false;
+								else
+								{
+									frame_drop_count++;
+									frist_receive_i_frame = false;
 								printf("video unknow data:ret = %d count :%d\n", ret, receive_frame_count);
 								fflush(stdout);
 								ret = 0;
@@ -812,6 +836,7 @@ static void *network_video_receive_package_task(void *arg)
 						}
 						else
 						{
+							frame_drop_count++;
 							frist_receive_i_frame = false;
 							printf("video unknow data:receive_video_index = %ld\n", receive_video_index);
 							fflush(stdout);
@@ -823,7 +848,37 @@ static void *network_video_receive_package_task(void *arg)
 		}
 		else
 		{
+			if (ret_select == 0)
+			{
+				select_timeout_count++;
+			}
+			else
+			{
+				select_error_count++;
+			}
 			ak_sleep_ms(1);
+		}
+
+		if (tuya_client_num_get() > 0 &&
+			((video_ingress_trace_last_ms == 0) ||
+			 (trace_now_ms - video_ingress_trace_last_ms >= 5000)))
+		{
+			Debug_Lib("[TUYA_VIDEO_TRACE] ingress: ready=%lu timeout=%lu select_err=%lu packets=%lu bytes=%lu headers=%lu complete=%lu drops=%lu waiting_i=%d assembling=%d frame_bytes=%u last_packet_age=%llums index=%lu run=%d\n",
+					  select_ready_count, select_timeout_count, select_error_count,
+					  receive_packet_count, receive_byte_count, frame_header_count,
+					  frame_complete_count, frame_drop_count, !frist_receive_i_frame,
+					  receive_frame_start, receive_frame_count,
+					  last_video_packet_ms == 0 ? 0 : trace_now_ms - last_video_packet_ms,
+					  receive_video_index, networK_video_receive_task_run);
+			video_ingress_trace_last_ms = trace_now_ms;
+			select_ready_count = 0;
+			select_timeout_count = 0;
+			select_error_count = 0;
+			receive_packet_count = 0;
+			receive_byte_count = 0;
+			frame_header_count = 0;
+			frame_complete_count = 0;
+			frame_drop_count = 0;
 		}
 	}
 
