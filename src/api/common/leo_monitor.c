@@ -3,6 +3,7 @@
 #include "video_decode.h"
 #include "file_api.h"
 #include "network_common.h"
+#include "cctv_stream_policy.h"
 #include "../audio/audio_input.h"
 #include "../audio/audio_decode.h"
 #include "stdio.h"
@@ -11,6 +12,31 @@
 static MONITOR_ENTER_WAY monitor_enter_flag = MONITOR_ENTER_NONE;
 
 extern void fb_video_mode_enable(bool);
+
+static void cctv_diag_monitor_config(const char *stage, MONITOR_CH channel, const camera_info *camera, int stream_type)
+{
+	const char *ip = camera->ip[0] != '\0' ? camera->ip : "<empty>";
+	unsigned int account_len = (unsigned int)strlen(camera->account);
+	unsigned int password_len = (unsigned int)strlen(camera->pwd);
+	int invalid = camera->ip[0] == '\0' || camera->ip[0] == '0' ||
+		strcmp(camera->ip, "0.0.0.0") == 0 || account_len == 0 || password_len == 0;
+
+	Debug_Lib("[CCTV_DIAG] %s channel=%d ip=%s account_len=%u password_len=%u model=%d stream=%d url_present=%d invalid=%d\n",
+		stage, channel, ip, account_len, password_len, camera->model, stream_type,
+		camera->url[0] == 'r', invalid);
+}
+
+static const char *monitor_cctv_url_get(const camera_info *camera, char *buf, size_t buf_size)
+{
+	if (camera->url[0] == 'r')
+	{
+		return camera->url;
+	}
+
+	cctv_stream_url_build(buf, buf_size, camera->model, cctv_stream_from_url(camera->url),
+		camera->account, camera->pwd, camera->ip);
+	return buf;
+}
 
 void monitor_enter_way_set(MONITOR_ENTER_WAY flag)
 {
@@ -66,7 +92,7 @@ void monitor_open(bool reset)
 	rtsp_stream_close();
 	video_decode_queue_reset();
 #ifndef DHCP_IPCAMERA
-	static char buf[96] = {0};
+	static char buf[128] = {0};
 #endif
 
 	if (monitor_channel == MON_CH_DOOR_1 && (device_online_state_get(DEVICE_OUTDOOR_1) || monitor_enter_way_get() == MONITOR_ENTER_CALL))
@@ -86,18 +112,13 @@ void monitor_open(bool reset)
 	else if (monitor_channel == MON_CH_CCTV_1 && monitor_config_get()->cctv1 != NULL)
 	{
 		video_decode_open(0, DECODE_WIDTH, DECODE_HIGHT); // 640, 360);
+		cctv_diag_monitor_config("monitor_open", monitor_channel, monitor_config_get()->cctv1,
+			cctv_stream_from_url(monitor_config_get()->cctv1->url));
 
-#ifndef DHCP_IPCAMERA
-		if (monitor_config_get()->cctv1->model)
-		{ // HIK
-			sprintf(buf, "rtsp://%s:%s@%s:554/Streaming/Channels/1", monitor_config_get()->cctv1->account, monitor_config_get()->cctv1->pwd, monitor_config_get()->cctv1->ip);
-		}
-		else
-		{ // DAH
-			sprintf(buf, "rtsp://%s:%s@%s:554/cam/realmonitor?channel=1&subtype=1", monitor_config_get()->cctv1->account, monitor_config_get()->cctv1->pwd, monitor_config_get()->cctv1->ip);
-		}
-		Debug_Lib("==>>%s\n\n\n\n\n", buf);
-		rtsp_stream_open(buf);
+	#ifndef DHCP_IPCAMERA
+		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv1, buf, sizeof(buf));
+		Debug_Lib("==>>%s\n\n\n\n\n", url);
+		rtsp_stream_open((char *)url);
 #else
 		if (monitor_config_get()->cctv1->url[0] == 'r')
 			rtsp_stream_open(monitor_config_get()->cctv1->url);
@@ -106,18 +127,13 @@ void monitor_open(bool reset)
 	else if (monitor_channel == MON_CH_CCTV_2 && monitor_config_get()->cctv2 != NULL)
 	{
 		video_decode_open(0, DECODE_WIDTH, DECODE_HIGHT); // 640, 360);
+		cctv_diag_monitor_config("monitor_open", monitor_channel, monitor_config_get()->cctv2,
+			cctv_stream_from_url(monitor_config_get()->cctv2->url));
 
-#ifndef DHCP_IPCAMERA
-		if (monitor_config_get()->cctv2->model)
-		{ // HIK
-			sprintf(buf, "rtsp://%s:%s@%s:554/Streaming/Channels/1", monitor_config_get()->cctv2->account, monitor_config_get()->cctv2->pwd, monitor_config_get()->cctv2->ip);
-		}
-		else
-		{ // DAH
-			sprintf(buf, "rtsp://%s:%s@%s:554/cam/realmonitor?channel=1&subtype=1", monitor_config_get()->cctv2->account, monitor_config_get()->cctv2->pwd, monitor_config_get()->cctv2->ip);
-		}
-		Debug_Lib("==>>%s\n\n\n\n\n", buf);
-		rtsp_stream_open(buf);
+	#ifndef DHCP_IPCAMERA
+		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv2, buf, sizeof(buf));
+		Debug_Lib("==>>%s\n\n\n\n\n", url);
+		rtsp_stream_open((char *)url);
 #else
 		if (monitor_config_get()->cctv2->url[0] == 'r')
 			rtsp_stream_open(monitor_config_get()->cctv2->url);
@@ -189,7 +205,7 @@ void monitor_switch(void)
 		video_decode_pause(true);
 
 #ifndef DHCP_IPCAMERA
-	static char buf[96] = {0};
+	static char buf[128] = {0};
 #endif
 
 	extern bool rtsp_stream_open(char *url);
@@ -218,20 +234,13 @@ void monitor_switch(void)
 	}
 	else if (monitor_channel == MON_CH_CCTV_1 && monitor_config_get()->cctv1 != NULL)
 	{
+		cctv_diag_monitor_config("monitor_switch", monitor_channel, monitor_config_get()->cctv1,
+			cctv_stream_from_url(monitor_config_get()->cctv1->url));
 
-#ifndef DHCP_IPCAMERA
-		if (monitor_config_get()->cctv1->model)
-		{ // HIK
-			sprintf(buf, "rtsp://%s:%s@%s:554/Streaming/Channels/1", monitor_config_get()->cctv1->account, monitor_config_get()->cctv1->pwd, monitor_config_get()->cctv1->ip);
-
-			// sprintf(buf, "rtsp://%s:%s@%s:554/Streaming/Channels/1","admin","Bcom12345", "192.168.170.103");
-		}
-		else
-		{ // DAH
-			sprintf(buf, "rtsp://%s:%s@%s:554/cam/realmonitor?channel=1&subtype=1", monitor_config_get()->cctv1->account, monitor_config_get()->cctv1->pwd, monitor_config_get()->cctv1->ip);
-		}
-		Debug_Lib("==>>%s\n\n\n\n\n", buf);
-		rtsp_stream_open(buf);
+	#ifndef DHCP_IPCAMERA
+		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv1, buf, sizeof(buf));
+		Debug_Lib("==>>%s\n\n\n\n\n", url);
+		rtsp_stream_open((char *)url);
 #else
 		if (monitor_config_get()->cctv1->url[0] == 'r')
 		{
@@ -243,19 +252,13 @@ void monitor_switch(void)
 	}
 	else if (monitor_channel == MON_CH_CCTV_2 && monitor_config_get()->cctv2 != NULL)
 	{
+		cctv_diag_monitor_config("monitor_switch", monitor_channel, monitor_config_get()->cctv2,
+			cctv_stream_from_url(monitor_config_get()->cctv2->url));
 
-#ifndef DHCP_IPCAMERA
-		if (monitor_config_get()->cctv2->model)
-		{ // HIK
-			sprintf(buf, "rtsp://%s:%s@%s:554/Streaming/Channels/1", monitor_config_get()->cctv2->account, monitor_config_get()->cctv2->pwd, monitor_config_get()->cctv2->ip);
-			// sprintf(buf, "rtsp://%s:%s@%s:554/Streaming/Channels/1","admin","Bcom12345", "192.168.170.103");
-		}
-		else
-		{ // DAH
-			sprintf(buf, "rtsp://%s:%s@%s:554/cam/realmonitor?channel=1&subtype=1", monitor_config_get()->cctv2->account, monitor_config_get()->cctv2->pwd, monitor_config_get()->cctv2->ip);
-		}
-		Debug_Lib("==>>%s\n\n\n\n\n", buf);
-		rtsp_stream_open(buf);
+	#ifndef DHCP_IPCAMERA
+		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv2, buf, sizeof(buf));
+		Debug_Lib("==>>%s\n\n\n\n\n", url);
+		rtsp_stream_open((char *)url);
 #else
 		if (monitor_config_get()->cctv2->url[0] == 'r')
 			rtsp_stream_open(monitor_config_get()->cctv2->url);
@@ -317,12 +320,14 @@ void audio_send_task_open(audio_talk_ctrl *ctrl)
 		int slave_id = 0;
 		slave_id = network_get_id_slave_id(network_local_device_get(), ctrl->user.dev_id);
 		eth_p_id = network_common_socket_eth_p_get(1, slave_id, ctrl->user.family_id);
-		Debug_Lib("%d ,%d ,%d ,0x%x\n\n\n", ctrl->user.dev_id, ctrl->user.family_id, slave_id, eth_p_id);
+		Debug_Lib("[AUDIO_DIAG] send open device=%d family=%d slave=%d eth=0x%x current=0x%x\n",
+				  ctrl->user.dev_id, ctrl->user.family_id, slave_id, eth_p_id, network_audio_send_task_eth_id());
 
 		if (network_audio_send_task_eth_id() != eth_p_id)
 		{
 			network_audio_send_package_close();
 			network_audio_send_package_open(eth_p_id);
+			Debug_Lib("[AUDIO_DIAG] send opened eth=0x%x\n", network_audio_send_task_eth_id());
 		}
 	}
 
@@ -336,12 +341,14 @@ void audio_receive_task_open(audio_talk_ctrl *ctrl)
 		int slave_id = 0;
 		slave_id = network_get_id_slave_id(network_local_device_get(), ctrl->user.dev_id);
 		eth_p_id = network_common_socket_eth_p_get(1, slave_id, ctrl->user.family_id);
-		Debug_Lib("%d ,%d ,%d ,0x%x\n\n\n", ctrl->user.dev_id, ctrl->user.family_id, slave_id, eth_p_id);
+		Debug_Lib("[AUDIO_DIAG] receive open device=%d family=%d slave=%d eth=0x%x current=0x%x\n",
+				  ctrl->user.dev_id, ctrl->user.family_id, slave_id, eth_p_id, network_audio_receive_task_eth_id());
 
 		if (network_audio_receive_task_eth_id() != eth_p_id)
 		{
 			network_audio_receive_package_close();
 			network_audio_receive_package_open(eth_p_id);
+			Debug_Lib("[AUDIO_DIAG] receive opened eth=0x%x\n", network_audio_receive_task_eth_id());
 		}
 	}
 
@@ -389,6 +396,8 @@ static void (*audio_operation_func[])(audio_talk_ctrl *ctrl) =
 #if 1
 bool audio_talk_open(audio_talk_ctrl ctrl)
 {
+	Debug_Lib("[AUDIO_DIAG] talk open request device=%d family=%d option=0x%x mode=%d decode=%d vol=%d\n",
+			  ctrl.user.dev_id, ctrl.user.family_id, ctrl.option, ctrl.talk_pattern, ctrl.audio_decode, ctrl.vol);
 	Debug_Lib("%s ----------> [device]:%d   [talk_mode] %d [open_audiocast] :%d   [audio_decode]:%d  [family_id]:%d\n\r", __func__, ctrl.user.dev_id, ctrl.talk_pattern, ctrl.open_audiocast, ctrl.audio_decode, ctrl.user.family_id);
 
 	if (ctrl.user.dev_id == DEVICE_CCTV_1 || ctrl.user.dev_id == DEVICE_CCTV_2)
@@ -406,6 +415,8 @@ bool audio_talk_open(audio_talk_ctrl ctrl)
 		}
 	}
 	audio_talk_status = ctrl.talk_pattern;
+	Debug_Lib("[AUDIO_DIAG] talk open complete device=%d status=%d send_eth=0x%x receive_eth=0x%x\n",
+			  ctrl.user.dev_id, audio_talk_status, network_audio_send_task_eth_id(), network_audio_receive_task_eth_id());
 	return true;
 }
 // talk_mode : 0 -> ai close  ao close
@@ -474,8 +485,8 @@ bool audio_talk_open(audio_talk_ctrl ctrl)
 
 bool audio_talk_close(bool all_close)
 {
-	Debug_Lib("[TUYA_AUDIO_TRACE] %s: all_close=%d audiocast=%d status=%d -> close network audio send/receive\n",
-			  __func__, all_close, audiocast, audio_talk_status);
+	Debug_Lib("[AUDIO_DIAG] talk close all=%d audiocast=%d status=%d send_eth=0x%x receive_eth=0x%x\n",
+			  all_close, audiocast, audio_talk_status, network_audio_send_task_eth_id(), network_audio_receive_task_eth_id());
 	// if (audiocast == false)
 	// {
 	// 	Debug_Lib("device audio not talk \n");

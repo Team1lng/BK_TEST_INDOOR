@@ -262,6 +262,9 @@ const char *multi_lingual[STR_TOTAL][LANGUAGE_TOTAL] =
 		{"Camera model", "摄像机型号", "Kamera modell", "דגם מצלמה", "Model aparatu", "Modelo de câmera", "Modelo de cámara", "Modèle caméra", "防犯カメラ機種", "Modello di fotocamera"},
 		{"Dahua", "大华", "Dahua", "Dahua", "Dahua", "Dahua", "Dahua", "Dahua", "Dahua社製", "Dahua"},
 		{"Hikvision", "海康", "Hikvision", "Hikvision", "Hikvision", "Hikvision", "Caminata", "Hikvision", "Hikvision社製", "Hikvision"},
+		{"Channel switch", "通道切换", "Kanalwechsel", "החלפת ערוץ", "Przełączanie kanału", "Alternância de canal", "Cambio de canal", "Changement de canal", "チャンネル切替", "Cambio canale", "Kanaal wisselen", "Prepínanie kanálov"},
+		{"Main stream", "主码流", "Hauptstream", "זרם ראשי", "Strumień główny", "Fluxo principal", "Flujo principal", "Flux principal", "メインストリーム", "Flusso principale"},
+		{"Sub stream", "子码流", "Substream", "זרם משני", "Strumień pomocniczy", "Fluxo secundário", "Flujo secundario", "Flux secondaire", "サブストリーム", "Flusso secondario"},
 		{"Camera IP address", "摄像机IP地址", "IP Adresse der Kamera", "כתובת IP של המצלמה", "Adres IP kamery", "Endereço IP da câmera", "Dirección IP de la cámara", "Adresse IP caméra", "防犯カメラIPアドレス", "Indirizzo IP della telecamera"},
 		{"Account number", "账号", "Login", "מספר חשבון", "Numer konta", "Número da conta", "Número de cuenta", "Identifiant compte", "アカウント名", "Numero di conto"},
 		{"Password", "密码", "Passwort", "סיסמה", "Hasło", "Senha", "Contraseña", "Mot de passe", "パスワード", "Password"},
@@ -1392,6 +1395,11 @@ bool indoor_is_local_monitoring(void)
 			way == MONITOR_ENTER_MONTION || way == MONITOR_ENTER_ALARM);
 }
 
+bool indoor_is_local_talking(void)
+{
+	return monitor_enter_way_get() == MONITOR_ENTER_CALL;
+}
+
 void network_event_register(event_pro_callback handle)
 {
 	network_event_callback = handle;
@@ -1824,8 +1832,8 @@ bool tuya_monitor_absent_mode_event(bool state)
 }
 bool tuya_monitor_enter_event(void)
 {
-	Debug("[TUYA_UI_TRACE] enqueue monitor enter: enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
-		  monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
+	// Debug("[TUYA_UI_TRACE] enqueue monitor enter: enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
+		//   monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
 	lv_event_info *node = lv_os_event_queue_node_new();
 	if (node == NULL)
 	{
@@ -1840,8 +1848,8 @@ bool tuya_monitor_enter_event(void)
 }
 bool tuya_monitor_quit_event(void)
 {
-	Debug("[TUYA_UI_TRACE] enqueue monitor quit: enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
-		  monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
+	// Debug("[TUYA_UI_TRACE] enqueue monitor quit: enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
+		//   monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
 	lv_event_info *node = lv_os_event_queue_node_new();
 	if (node == NULL)
 	{
@@ -2208,9 +2216,9 @@ static void btn_event_handler(lv_obj_t *obj, lv_event_t event)
 	}
 	if (tuya_client_num_get() > 0 && (event == LV_EVENT_PRESSED || event == LV_EVENT_RELEASED))
 	{
-		Debug("[TUYA_UI_TRACE] lvgl btn event: obj=%p id=%d event=%d click=%d layout=%p clients=%d enter_way=%d\n",
-			  obj, obj->obj_id, event, lv_obj_get_click(obj), current_layout_get(),
-			  tuya_client_num_get(), monitor_enter_way_get());
+		// Debug("[TUYA_UI_TRACE] lvgl btn event: obj=%p id=%d event=%d click=%d layout=%p clients=%d enter_way=%d\n",
+		// 	  obj, obj->obj_id, event, lv_obj_get_click(obj), current_layout_get(),
+		// 	  tuya_client_num_get(), monitor_enter_way_get());
 	}
 	// Debug("obj:%p,event:%d\n", obj, event);
 	if (event == LV_EVENT_PRESSED)

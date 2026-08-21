@@ -644,7 +644,7 @@ void weather_anim_deleted_cb(struct _lv_obj_t *obj, lv_event_t event)
 
 void standby_weather_widgets_up(lv_obj_t *obj /* ,lv_event_t event */)
 {
-	Debug("[TUYA_UI_TRACE] weather screen touch -> standby_click_up\n");
+	// Debug("[TUYA_UI_TRACE] weather screen touch -> standby_click_up\n");
 	standby_click_up(obj);
 }
 
@@ -897,15 +897,18 @@ static void monitor_indoor_cmd_func(unsigned long arg1, unsigned long arg2)
 bool get_outdoor_talk_state(MONITOR_CH ch);
 static void standby_click_up(lv_obj_t *obj)
 {
-	bool outdoor_talking = get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2);
+	/* 仅以本机是否正在门口机对讲(MONITOR_ENTER_CALL)为准。
+	   门口机 talk_busy 是总线级状态，主机(A)的 Tuya 监控/通话都会置位，
+	   若据此冻结分机(B)的待机触屏，会出现“分机本地触屏无响应”，故改用本机状态 */
+	bool outdoor_talking = (monitor_enter_way_get() == MONITOR_ENTER_CALL);
 	bool tuya_client_active = tuya_client_num_get() > 0;
 
-	Debug("[TUYA_UI_TRACE] standby screen touch: enter_way=%d clients=%d monitor_state=%d screen_click=%d door1_talk=%d door2_talk=%d\n",
-		  monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()),
-		  get_outdoor_talk_state(MON_CH_DOOR_1), get_outdoor_talk_state(MON_CH_DOOR_2));
+	// Debug("[TUYA_UI_TRACE] standby screen touch: enter_way=%d clients=%d monitor_state=%d screen_click=%d door1_talk=%d door2_talk=%d\n",
+	// 	  monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()),
+	// 	  get_outdoor_talk_state(MON_CH_DOOR_1), get_outdoor_talk_state(MON_CH_DOOR_2));
 	if (!tuya_session_standby_touch_allowed(outdoor_talking, tuya_client_active))
 	{
-		Debug("[TUYA_UI_TRACE] standby screen touch blocked by non-tuya outdoor call\n");
+		// Debug("[TUYA_UI_TRACE] standby screen touch blocked by non-tuya outdoor call\n");
 		return;
 	}
 
@@ -1024,7 +1027,8 @@ static void standby_time_display_task(struct _lv_task_t *task_t)
 static void standby_time_touch_up(lv_obj_t *obj)
 {
 	Debug("==================>>>>:%d\n\n\n", backlight_status_get());
-	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2))
+	/* 仅本机在门口机对讲时才拦截，总线 talk_busy 不应冻结分机待机触屏 */
+	if (monitor_enter_way_get() == MONITOR_ENTER_CALL)
 	{
 		return;
 	}
@@ -1238,14 +1242,15 @@ static void standby_gate_task(lv_task_t *task_t)
 
 static void standy_menu_btn_up(lv_obj_t *obj)
 {
-	bool outdoor_talking = get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2);
+	/* 同 standby_click_up：以本机门口机对讲状态为准，避免被主机 Tuya 监控的总线 talk_busy 冻结分机触屏 */
+	bool outdoor_talking = (monitor_enter_way_get() == MONITOR_ENTER_CALL);
 	bool tuya_client_active = tuya_client_num_get() > 0;
 
-	Debug("[TUYA_UI_TRACE] standby shortcut touch: id=%d outdoor_talking=%d clients=%d\n",
-		  obj->obj_id, outdoor_talking, tuya_client_num_get());
+	// Debug("[TUYA_UI_TRACE] standby shortcut touch: id=%d outdoor_talking=%d clients=%d\n",
+	// 	  obj->obj_id, outdoor_talking, tuya_client_num_get());
 	if (!tuya_session_standby_touch_allowed(outdoor_talking, tuya_client_active))
 	{
-		Debug("[TUYA_UI_TRACE] standby shortcut blocked by non-tuya outdoor call\n");
+		// Debug("[TUYA_UI_TRACE] standby shortcut blocked by non-tuya outdoor call\n");
 		return;
 	}
 
@@ -1659,7 +1664,8 @@ static void motion_channel_label_display(void)
 
 static void motion_back_btn_up(lv_obj_t *obj)
 {
-	if (get_outdoor_talk_state(MON_CH_DOOR_1) || get_outdoor_talk_state(MON_CH_DOOR_2))
+	/* 仅本机在门口机对讲时才拦截，总线 talk_busy 不应冻结分机触屏 */
+	if (monitor_enter_way_get() == MONITOR_ENTER_CALL)
 	{
 		return;
 	}
@@ -2124,8 +2130,8 @@ static void LAYOUT_ENETER_FUNC(standby)
 	obj->user_data = &btn_data;
 	btn_touch_event_listen(obj);
 	lv_obj_set_click(obj, true);
-	Debug("[TUYA_UI_TRACE] standby enter: screen_click=%d enter_way=%d clients=%d monitor_state=%d\n",
-		  lv_obj_get_click(obj), monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get());
+	// Debug("[TUYA_UI_TRACE] standby enter: screen_click=%d enter_way=%d clients=%d monitor_state=%d\n",
+	// 	  lv_obj_get_click(obj), monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get());
 	static rom_bin_info info = rom_bin_info_get(ROM_RES_BG_BG3_JPG);
 
 	if (is_sdcard_insert() == true && !user_data_get()->door1.motion_sensitivity && !user_data_get()->door2.motion_sensitivity && user_data_get()->scene.digital_photo_frame_sw && picture_play_parameter_init())

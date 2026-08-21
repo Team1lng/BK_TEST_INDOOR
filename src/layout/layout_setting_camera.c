@@ -1,10 +1,12 @@
 #include "layout_define.h"
 #include "leo_api.h"
+#include "../api/common/cctv_stream_policy.h"
 
 typedef enum camera_module_list
 {
 	SWITCH_MODULE,
 	MODEL_MODULE,
+	STREAM_MODULE,
 	IP_MODULE,
 	ACCOUNT_MODULE,
 	PASSWORD_MODULE,
@@ -16,14 +18,29 @@ typedef enum camera_module_list
 			{199,127,700,52},\
 			{199,179,700,52},\
 			{199,231,700,52},\
-			{199,293,700,52},\
+			{199,285,700,52},\
+			{199,339,700,52},\
 	};
 
 static bool set_camera_flag = 0;
+static cctv_stream_type camera_stream_type[2] = {CCTV_STREAM_MAIN, CCTV_STREAM_MAIN};
 extern char input_data[16];
 extern int get_pwd_str;
 
 static void ccamera_setting_display(void);
+
+static void cctv_diag_camera_config(const char *stage, int camera_index, const camera_info *camera, int stream_type)
+{
+	const char *ip = camera->ip[0] != '\0' ? camera->ip : "<empty>";
+	unsigned int account_len = (unsigned int)strlen(camera->account);
+	unsigned int password_len = (unsigned int)strlen(camera->pwd);
+	int invalid = camera->ip[0] == '\0' || camera->ip[0] == '0' ||
+		strcmp(camera->ip, "0.0.0.0") == 0 || account_len == 0 || password_len == 0;
+
+	Debug("[CCTV_DIAG] %s camera%d ip=%s account_len=%u password_len=%u model=%d stream=%d url_present=%d invalid=%d\n",
+		stage, camera_index, ip, account_len, password_len, camera->model, stream_type,
+		camera->url[0] == 'r', invalid);
+}
 
 
 
@@ -210,6 +227,30 @@ static void camera_camera_model_set_btn_create(Controls_location coordinate){
 	lv_obj_set_id(btn, 2);
 
 }
+
+static void camera_camera_stream_right_btn_up(lv_obj_t *obj)
+{
+	camera_set_btn_syn_up(obj);
+	camera_stream_type[set_camera_flag] = camera_stream_type[set_camera_flag] == CCTV_STREAM_MAIN ? CCTV_STREAM_SUB : CCTV_STREAM_MAIN;
+	lv_obj_t *btn = lv_obj_get_child_form_id(lv_scr_act(), 9);
+	lv_obj_set_style_local_value_str(btn, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT,
+		camera_stream_type[set_camera_flag] == CCTV_STREAM_SUB ? text_str(STR_SUB_STREAM) : text_str(STR_MAIN_STREAM));
+}
+
+static void camera_camera_stream_set_btn_create(Controls_location coordinate)
+{
+	static btn_data btn_data1 = btn_data_create(camera_set_btn_syn_down, camera_camera_stream_right_btn_up, NULL);
+	static btn_data btn_data2 = btn_data_create(camera_set_btn_syn_down, camera_camera_stream_right_btn_up, NULL);
+	static btn_data btn_data3 = btn_data_create(NULL, NULL, NULL);
+	btn_data1.OPS_ANYTHING = camera_set_btn_syn_event;
+	btn_data2.OPS_ANYTHING = camera_set_btn_syn_event;
+
+	lv_obj_t *btn = sys_setting_btn_create(coordinate,
+		camera_stream_type[set_camera_flag] == CCTV_STREAM_SUB ? text_str(STR_SUB_STREAM) : text_str(STR_MAIN_STREAM),
+		text_str(STR_CHANNEL_SWITCH), &btn_data3, &btn_data1, &btn_data2);
+	lv_obj_set_id(btn, 9);
+}
+
 static void camera_camera_ip_set_btn_up(lv_obj_t *obj)
 {
     camera_set_btn_syn_up(obj);
@@ -321,6 +362,7 @@ static void ccamera_setting_display(void)
     camera_setting_btn_text_create();
 	camera_camera_switch_set_btn_create(module_coordinate[SWITCH_MODULE]);
 	camera_camera_model_set_btn_create(module_coordinate[MODEL_MODULE]);
+	camera_camera_stream_set_btn_create(module_coordinate[STREAM_MODULE]);
 	camera_camera_ip_set_btn_create(module_coordinate[IP_MODULE]);
 	camera_camera_account_set_btn_create(module_coordinate[ACCOUNT_MODULE]);
 	camera_camera_pwd_mode_set_btn_create(module_coordinate[PASSWORD_MODULE]);
@@ -336,7 +378,11 @@ static void LAYOUT_ENETER_FUNC(setting_camera)
 	if(prev_layout_get() != &layout_password_input)
 	{
 		set_camera_flag = 0;
+		camera_stream_type[0] = cctv_stream_from_url(user_data_get()->camera1.url);
+		camera_stream_type[1] = cctv_stream_from_url(user_data_get()->camera2.url);
 	}
+	cctv_diag_camera_config("setting_enter", 1, &user_data_get()->camera1, camera_stream_type[0]);
+	cctv_diag_camera_config("setting_enter", 2, &user_data_get()->camera2, camera_stream_type[1]);
 	ccamera_setting_display();
 	
 }
@@ -344,32 +390,31 @@ static void LAYOUT_ENETER_FUNC(setting_camera)
 
 static void LAYOUT_QUIT_FUNC(setting_camera)
 {
-   if(user_data_get()->camera1.ip[0] != 0 && user_data_get()->camera1.ip[0] != '0')
-   {	
-		if(user_data_get()->camera1.model)
-		sprintf(user_data_get()->camera1.url, "rtsp://%s:%s@%s:554/Streaming/Channels/1", user_data_get()->camera1.account,user_data_get()->camera1.pwd, user_data_get()->camera1.ip);   
-		else
-		sprintf(user_data_get()->camera1.url, "rtsp://%s:%s@%s:554/cam/realmonitor?channel=1&subtype=1", user_data_get()->camera1.account,user_data_get()->camera1.pwd, user_data_get()->camera1.ip);   
+	cctv_diag_camera_config("setting_quit_before_save", 1, &user_data_get()->camera1, camera_stream_type[0]);
+	cctv_diag_camera_config("setting_quit_before_save", 2, &user_data_get()->camera2, camera_stream_type[1]);
+	if(user_data_get()->camera1.ip[0] != 0 && user_data_get()->camera1.ip[0] != '0')
+	{
+		cctv_stream_url_build(user_data_get()->camera1.url, sizeof(user_data_get()->camera1.url), user_data_get()->camera1.model,
+			camera_stream_type[0], user_data_get()->camera1.account, user_data_get()->camera1.pwd, user_data_get()->camera1.ip);
    }
    else
    {
 		memset(user_data_get()->camera1.url,0,sizeof(user_data_get()->camera1.url));
    }
-   if(user_data_get()->camera2.ip[0] != 0 && user_data_get()->camera2.ip[0] != '0')
-   {
-		if(user_data_get()->camera2.model)
-		sprintf(user_data_get()->camera2.url, "rtsp://%s:%s@%s:554/Streaming/Channels/1", user_data_get()->camera2.account,user_data_get()->camera2.pwd, user_data_get()->camera2.ip);   
-		else
-		sprintf(user_data_get()->camera2.url, "rtsp://%s:%s@%s:554/cam/realmonitor?channel=1&subtype=1", user_data_get()->camera2.account,user_data_get()->camera2.pwd, user_data_get()->camera2.ip);   
+	if(user_data_get()->camera2.ip[0] != 0 && user_data_get()->camera2.ip[0] != '0')
+	{
+		cctv_stream_url_build(user_data_get()->camera2.url, sizeof(user_data_get()->camera2.url), user_data_get()->camera2.model,
+			camera_stream_type[1], user_data_get()->camera2.account, user_data_get()->camera2.pwd, user_data_get()->camera2.ip);
    }
    else
    {
 		memset(user_data_get()->camera2.url,0,sizeof(user_data_get()->camera2.url));
    }
-    user_data_save();
+	cctv_diag_camera_config("setting_quit_after_url", 1, &user_data_get()->camera1, camera_stream_type[0]);
+	cctv_diag_camera_config("setting_quit_after_url", 2, &user_data_get()->camera2, camera_stream_type[1]);
+	 user_data_save();
+	Debug("[CCTV_DIAG] setting_save_complete\n");
 }
 
 
 CREATE_LAYOUT(setting_camera);
-
-

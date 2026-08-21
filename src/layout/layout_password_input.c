@@ -19,6 +19,21 @@ int get_pwd_str = 0; // 0:验证密码进入管理员设置  1：修改密码   
 
 extern void add_del_card_cmd(network_device ch, char mode, char lock);
 
+static void cctv_diag_input_result(int camera_index, const char *field, const char *value)
+{
+	const char *safe_value = value != NULL ? value : "<null>";
+	unsigned int value_len = (unsigned int)strlen(safe_value);
+
+	if (strcmp(field, "ip") == 0)
+	{
+		Debug("[CCTV_DIAG] input camera%d field=%s value=%s len=%u\n", camera_index, field, safe_value, value_len);
+	}
+	else
+	{
+		Debug("[CCTV_DIAG] input camera%d field=%s value_len=%u\n", camera_index, field, value_len);
+	}
+}
+
 extern lv_obj_t *addwifi_back_btn_create(void);
 extern lv_obj_t *input_textarea_create(lv_obj_t *parent, int x, int y, int w, int h, int max_length, bool pwd_mode, const char *txt);
 extern char connectwifi_name[24];
@@ -266,36 +281,42 @@ static void lv_keyboard_event_cb(lv_obj_t *kb)
 			{
 				strncpy(user_data_get()->camera1.ip, txt, 16);
 				user_data_get()->camera1.ip[15] = '\0';
+				cctv_diag_input_result(1, "ip", user_data_get()->camera1.ip);
 				goto_layout(pLAYOUT(setting_camera));
 			}
 			else if (get_pwd_str == 3)
 			{
 				strncpy(user_data_get()->camera2.ip, txt, 16);
 				user_data_get()->camera2.ip[15] = '\0';
+				cctv_diag_input_result(2, "ip", user_data_get()->camera2.ip);
 				goto_layout(pLAYOUT(setting_camera));
 			}
 			else if (get_pwd_str == 4)
 			{
 				strncpy(user_data_get()->camera1.account, txt, 16);
 				user_data_get()->camera1.account[15] = '\0';
+				cctv_diag_input_result(1, "account", user_data_get()->camera1.account);
 				goto_layout(pLAYOUT(setting_camera));
 			}
 			else if (get_pwd_str == 5)
 			{
 				strncpy(user_data_get()->camera2.account, txt, 16);
 				user_data_get()->camera2.account[15] = '\0';
+				cctv_diag_input_result(2, "account", user_data_get()->camera2.account);
 				goto_layout(pLAYOUT(setting_camera));
 			}
 			else if (get_pwd_str == 6)
 			{
 				strncpy(user_data_get()->camera1.pwd, txt, 16);
 				user_data_get()->camera1.pwd[15] = '\0';
+				cctv_diag_input_result(1, "password", user_data_get()->camera1.pwd);
 				goto_layout(pLAYOUT(setting_camera));
 			}
 			else if (get_pwd_str == 7)
 			{
 				strncpy(user_data_get()->camera2.pwd, txt, 16);
 				user_data_get()->camera2.pwd[15] = '\0';
+				cctv_diag_input_result(2, "password", user_data_get()->camera2.pwd);
 				goto_layout(pLAYOUT(setting_camera));
 			}
 		}

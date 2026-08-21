@@ -1,3 +1,10 @@
+版本：3.0.5 2026-08-20
+1、修复手机Tuya监控+室内机本地监控并存时手机对讲无音频：SPEAKER_START门控原以indoor_is_local_monitoring()(含MANUAL被动监控)拒绝手机对讲，导致门口机talk通道未建立；新增indoor_is_local_talking()(仅=MONITOR_ENTER_CALL)，三处门控(ty_sdk_media_callback.c:195、layout_monitor.c:536/669)改为只拦主动通话(CALL)或内线(interphone)，放行被动监控。indoor_is_local_monitoring()本体及其频道切换守卫(layout_monitor.c:628)不变。
+2、修复language.xls camera区段文本错位：xls中"Camera IP address"被插在"Channel switch/Main stream/Sub stream"之前，与STR枚举(layout_define.h:252-260)顺序不符，导致Camera model下面显示IP地址、通道切换标签错位；已重排为 Camera model→Dahua→Hikvision→Channel switch→Main stream→Sub stream→Camera IP address→Account→Password（同步改 src/layout/resource/language/language.xls 与 upgrade/app/language.xls）。
+
+版本：3.0.4 2026-08-18
+1、修复分机(副室内机)本地触屏无响应：待机界面操作原以总线级门口机talk_busy(get_outdoor_talk_state)判定，主机(A)连接Tuya被手机监控/通话时，总线talk_busy置位会误冻结分机(B)的待机触屏；改为以本机是否正在门口机对讲(monitor_enter_way_get()==MONITOR_ENTER_CALL)为准，主机行为不变。
+
 版本：3.0.3 2026-05-18
 1、更换tuya下发音频格式，兼容Alexa；
 2、修改天气显示界面点击返回待机界面。

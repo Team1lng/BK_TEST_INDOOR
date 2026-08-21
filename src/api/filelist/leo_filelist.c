@@ -513,7 +513,6 @@ static bool scan_find_file(media_type type, const char *dir_path, media_info *p_
         sprintf(cmd_buffer, "find %s -type f", dir_path);
     }
 
-    Debug_Lib("--- %s %d ---\n\r", cmd_buffer, strlen(cmd_buffer));
     FILE *pf = popen(cmd_buffer, "r");
     char buffer[128] = {0};
     while (fgets(buffer, 128, pf))
@@ -828,7 +827,6 @@ static void sd_media_file_load(media_type type, media_info *p_info, int *p_total
     }
     // sd_file_sync(type);
     fclose(fp);
-    Debug_Lib("media total:%d total_new:%d\n\r", (*p_total), (*p_total_new));
 }
 
 static void sd_file_sync(media_type type)
@@ -1016,7 +1014,6 @@ static int scan_media_file(media_type type)
     int *p_total = NULL;
     int *p_new_total = NULL;
 
-    Debug_Lib("scan_media_file type: %d \n\r", type);
     if (type == FILE_TYPE_SD_MIXED || type == FILE_TYPE_SD_MIXED_PHOTO || type == FILE_TYPE_SD_MIXED_VIDEO)
     {
 

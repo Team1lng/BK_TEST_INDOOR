@@ -252,6 +252,9 @@ enum btn_string_id
     STR_CAMERA_MODEL,
     STR_DAHUA,
     STR_HIKVISION,
+    STR_CHANNEL_SWITCH,
+    STR_MAIN_STREAM,
+    STR_SUB_STREAM,
     STR_CAMERA_IP_ADDRESS,
     STR_ACCOUNT_NUMBER,
     STR_PASSWORD,
@@ -591,6 +594,7 @@ void tuya_event_register(event_pro_callback handle);
 bool tuya_audio_occupied_check(void);
 bool tuya_talk_active_get(void);
 bool indoor_is_local_monitoring(void);
+bool indoor_is_local_talking(void);
 bool tuya_monitor_swap_event(int ch);
 bool tuya_enter_monitor_push(void);
 bool tuya_monitor_talk_event(bool state);

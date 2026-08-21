@@ -32,6 +32,7 @@
 #include "leo_api.h"
 #include "tuya_sdk.h"
 #include "debug_printf.h"
+#include "outdoor_talk_state_policy.h"
 
 bool dev_info_status_event_push(unsigned long arg1, unsigned long arg2);
 
@@ -40,6 +41,9 @@ bool dev_info_status_event_push(unsigned long arg1, unsigned long arg2);
 
 #define ETH_P_CMD 0xFFFF // 0x0800//
 #define BEATTIM 4		 // 心跳包时间间隔
+#define OUTDOOR_HANG_BUSY_GRACE_MS 3000ULL
+
+extern unsigned long long os_get_ms(void);
 
 static int cmd_receive_fd = -1;
 static int cmd_send_fd = -1;
@@ -79,6 +83,11 @@ struct
 	door_staus_info info[2];
 } OutDoor_Info;
 
+static unsigned long long outdoor_hang_ms[2];
+static bool outdoor_talk_diag_initialized[2];
+static bool outdoor_talk_diag_raw_busy[2];
+static bool outdoor_talk_diag_effective_busy[2];
+
 moniotr_config moniotr_conf = {NULL};
 
 void monitor_device_init(door_info *doo1, door_info *door2, camera_info *cctv1, camera_info *cctv2)
@@ -96,7 +105,21 @@ moniotr_config *monitor_config_get(void)
 
 bool get_outdoor_talk_state(MONITOR_CH ch)
 {
-	return OutDoor_Info.info[ch == MON_CH_DOOR_1 ? 0 : 1].talk_busy;
+	int index = ch == MON_CH_DOOR_1 ? 0 : 1;
+	unsigned long long now_ms = os_get_ms();
+	bool raw_busy = OutDoor_Info.info[index].talk_busy;
+	bool effective_busy = outdoor_talk_busy_effective(raw_busy, now_ms, outdoor_hang_ms[index], OUTDOOR_HANG_BUSY_GRACE_MS);
+	if (!outdoor_talk_diag_initialized[index] ||
+		outdoor_talk_diag_raw_busy[index] != raw_busy ||
+		outdoor_talk_diag_effective_busy[index] != effective_busy)
+	{
+		Debug_Lib("[AUDIO_DIAG] door=%d busy raw=%d effective=%d now=%llu hang=%llu grace=%llu\n",
+				  index + 1, raw_busy, effective_busy, now_ms, outdoor_hang_ms[index], OUTDOOR_HANG_BUSY_GRACE_MS);
+		outdoor_talk_diag_initialized[index] = true;
+		outdoor_talk_diag_raw_busy[index] = raw_busy;
+		outdoor_talk_diag_effective_busy[index] = effective_busy;
+	}
+	return effective_busy;
 }
 
 int get_outdoor_model_version(network_device ch, int *model, int *ver)
@@ -632,9 +655,6 @@ static void net_common_outdoor_call_func(net_common_pack_info info)
 	if (upgradeing_flag)
 		return;
 
-	printf("======net_common_outdoor_call_func= %d ======>>>\n\n", info.arg2);
-	printf("======family_id= %d ======>>>\n\n", device_family_id);
-	fflush(stdout);
 	if (info.arg2 != device_family_id)
 	{
 		printf("outdoor_call family error\n\n");
@@ -666,6 +686,7 @@ static void net_common_outdoor_talk_func(net_common_pack_info info)
 		printf("out door talk Parameter error %d \n", info.arg1);
 		return;
 	}
+	outdoor_hang_ms[talk_ch - MON_CH_DOOR_1] = 0;
 	printf("out door talk tlaking %d     monitor_ch%d      open:%d\n", info.arg1, monitor_ch, is_audio_talk_open());
 	network_device outdoor_device = talk_ch == MON_CH_DOOR_1 ? DEVICE_OUTDOOR_1 : DEVICE_OUTDOOR_2;
 	if ((is_audio_talk_open() == AI_AO_O) && (monitor_ch == talk_ch))
@@ -695,6 +716,14 @@ static void net_common_outdoor_hand_func(net_common_pack_info info)
 		printf("out door talk Parameter error %d \n", info.arg1);
 		return;
 	}
+	if (talk_ch == MON_CH_DOOR_1 || talk_ch == MON_CH_DOOR_2)
+	{
+		int index = talk_ch - MON_CH_DOOR_1;
+		OutDoor_Info.info[index].talk_busy = false;
+		outdoor_hang_ms[index] = os_get_ms();
+		Debug_Lib("[AUDIO_DIAG] hang received door=%d from=%d hang_ms=%llu\n",
+				  index + 1, info.send_device, outdoor_hang_ms[index]);
+	}
 	// Debug_Lib("\n");
 	extern bool indoor_cmd_event_push(unsigned long arg1, unsigned long arg2);
 	unsigned long arg2 = info.arg1 == MON_CH_DOOR_1	  ? DEVICE_OUTDOOR_1
@@ -705,7 +734,6 @@ static void net_common_outdoor_hand_func(net_common_pack_info info)
 
 static void net_common_interphone_call_func(net_common_pack_info info)
 {
-	printf("receive family:%d    receive device:%d    send family:%d    send device:%d 	arg1 :%d\n", info.arg2 & 0x0F, info.receive_device, info.arg2 >> 4, info.send_device, info.arg1);
 	if ((info.arg2 & 0x0F) != device_family_id)
 	{
 		return;
@@ -858,7 +886,20 @@ static void net_common_stream_status_func(net_common_pack_info info)
 	{
 		OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].model = info.arg2;
 	}
-	OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].talk_busy = info.arg1 & 0x02;
+	int outdoor_index = info.send_device - DEVICE_OUTDOOR_1;
+	bool previous_raw_busy = OutDoor_Info.info[outdoor_index].talk_busy;
+	OutDoor_Info.info[outdoor_index].talk_busy = info.arg1 & 0x02;
+	if (previous_raw_busy != OutDoor_Info.info[outdoor_index].talk_busy)
+	{
+		unsigned long long now_ms = os_get_ms();
+		bool effective_busy = outdoor_talk_busy_effective(OutDoor_Info.info[outdoor_index].talk_busy,
+															 now_ms,
+															 outdoor_hang_ms[outdoor_index],
+															 OUTDOOR_HANG_BUSY_GRACE_MS);
+		Debug_Lib("[AUDIO_DIAG] status door=%d from=%d arg1=0x%x raw=%d->%d effective=%d now=%llu hang=%llu\n",
+				  outdoor_index + 1, info.send_device, info.arg1, previous_raw_busy,
+				  OutDoor_Info.info[outdoor_index].talk_busy, effective_busy, now_ms, outdoor_hang_ms[outdoor_index]);
+	}
 	OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].fingerprint_module = info.arg1 & 0x04;
 	if (OutDoor_Info.info[info.send_device - DEVICE_OUTDOOR_1].talk_busy)
 	{

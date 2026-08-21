@@ -143,34 +143,34 @@ INT_T TUYA_IPC_p2p_event_cb(IN CONST INT_T device, IN CONST INT_T channel, IN CO
     {
     case MEDIA_STREAM_LIVE_VIDEO_START:
     {
-        PR_DEBUG("[TUYA_UI_TRACE] video start: clients before=%d", client_online_num);
+        // PR_DEBUG("[TUYA_UI_TRACE] video start: clients before=%d", client_online_num);
         if (client_online_num++ > 0)
         {
-            PR_DEBUG("[TUYA_UI_TRACE] video start: additional client, clients now=%d", client_online_num);
+            // PR_DEBUG("[TUYA_UI_TRACE] video start: additional client, clients now=%d", client_online_num);
             break;
         }
 
         C2C_TRANS_CTRL_VIDEO_START *parm = (C2C_TRANS_CTRL_VIDEO_START *)args;
-        PR_DEBUG("chn[%u] video start", parm->channel);
+        // PR_DEBUG("chn[%u] video start", parm->channel);
         tuya_ring_buffer_clear();
         extern bool tuya_monitor_enter_event(void);
-        PR_DEBUG("[TUYA_UI_TRACE] video start -> tuya_monitor_enter_event(), clients=%d", client_online_num);
+        // PR_DEBUG("[TUYA_UI_TRACE] video start -> tuya_monitor_enter_event(), clients=%d", client_online_num);
         tuya_monitor_enter_event();
         break;
     }
     case MEDIA_STREAM_LIVE_VIDEO_STOP:
     {
-        PR_DEBUG("[TUYA_UI_TRACE] video stop: clients before=%d", client_online_num);
+        // PR_DEBUG("[TUYA_UI_TRACE] video stop: clients before=%d", client_online_num);
         if (--client_online_num > 0)
         {
-            PR_DEBUG("[TUYA_UI_TRACE] video stop: other clients remain, clients now=%d", client_online_num);
+            // PR_DEBUG("[TUYA_UI_TRACE] video stop: other clients remain, clients now=%d", client_online_num);
             break;
         }
 
         C2C_TRANS_CTRL_VIDEO_STOP *parm = (C2C_TRANS_CTRL_VIDEO_STOP *)args;
-        PR_DEBUG("chn[%u] video stop", parm->channel);
+        // PR_DEBUG("chn[%u] video stop", parm->channel);
         extern bool tuya_monitor_quit_event(void);
-        PR_DEBUG("[TUYA_UI_TRACE] video stop -> tuya_monitor_quit_event(), clients=%d", client_online_num);
+        // PR_DEBUG("[TUYA_UI_TRACE] video stop -> tuya_monitor_quit_event(), clients=%d", client_online_num);
         tuya_monitor_quit_event();
         break;
     }
@@ -191,8 +191,9 @@ INT_T TUYA_IPC_p2p_event_cb(IN CONST INT_T device, IN CONST INT_T channel, IN CO
         PR_DEBUG("[TUYA_AUDIO_TRACE] speaker start: video clients=%d", client_online_num);
         // 室内机本地监控或内线通话中，拒绝涂鸦对讲，返回占线(TRANS_EVENT_SPEAKER_ISUSED)
         extern bool indoor_is_local_monitoring(void);
+        extern bool indoor_is_local_talking(void);
         extern int interphone_status; /* 0=IDLE，定义于 layout_interphone.c */
-        if (indoor_is_local_monitoring() || interphone_status != 0)
+        if (indoor_is_local_talking() || interphone_status != 0)
         {
             PR_DEBUG("indoor busy, reject tuya speaker start, return SPEAKER_ISUSED");
             ret = TRANS_EVENT_SPEAKER_ISUSED;
