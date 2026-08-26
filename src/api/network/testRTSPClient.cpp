@@ -728,10 +728,14 @@ static void live555_rtsp_stream_insert(unsigned char *data, int len)
     //     rtsp_stream_thread_flag = true;
     // }
 
-    if (/* get_video_decode_state() == true && rtsp_stream_thread_flag &&  */ tuya_client_num_get() == 0)
+    if (get_video_decode_state() == true)
     {
         //  printf("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:%d = = %d\n",get_video_decode_state(),node.len);
         video_decode_push(0, (unsigned char *)node.data, node.len);
+    }
+
+    if (tuya_client_num_get() == 0)
+    {
         video_record_data_push(&node);
     }
 
