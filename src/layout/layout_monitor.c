@@ -60,6 +60,7 @@ static void monitor_Lock_2_btn_up(lv_obj_t *obj);
 static void monitor_light_control(bool open);
 
 static void monitor_call_extern_func(unsigned long arg1, unsigned long arg2);
+static bool monitor_phone_answer_local_call(void);
 /*
 static void network_event_extern_proc(unsigned long arg1, unsigned long arg2);
 static void network_event_inside_proc(unsigned int arg1, unsigned int arg2);
@@ -563,6 +564,10 @@ void tuya_event_inside_proc(unsigned long arg1, unsigned long arg2)
 	case TUYA_EVENT_MONITOR_ENTER:
 		/*Don't do anything*/
 		{
+			/* 手机从门铃推送页进入监控时，结束室内机本地呼叫页面，但不挂断门口机 */
+			if (monitor_phone_answer_local_call())
+				break;
+
 			// Debug("[TUYA_UI_TRACE] monitor inside enter: enter_way=%d clients=%d monitor_state=%d screen_click=%d\n",
 			// 	  monitor_enter_way_get(), tuya_client_num_get(), tuya_monitor_state_get(), lv_obj_get_click(lv_scr_act()));
 			// 室内机本地监控已持有视频管道时，保留本地状态并复用同一帧给涂鸦上传。
@@ -1709,6 +1714,23 @@ static void monitor_hand_btn_up(lv_obj_t *obj)
 
 	if (monitor_enter_way_get() != MONITOR_ENTER_TUYA)
 		goto_layout(pLAYOUT(standby)); // 页面跳转
+}
+
+static bool monitor_phone_answer_local_call(void)
+{
+	if (current_layout_get() != &layout_monitor || monitor_enter_way_get() != MONITOR_ENTER_CALL)
+		return false;
+
+	Debug("[TUYA_AUDIO_TRACE] phone answer local call: exit monitor to standby channel=%d\n",
+		  monitor_channel_get());
+	audio_play_stop_set();
+	audio_talk_close(true);
+	monitor_tuya_audio_open(true);
+	is_talking = false;
+	is_talked = false;
+	monitor_enter_way_set(MONITOR_ENTER_NONE);
+	goto_layout(pLAYOUT(standby));
+	return true;
 }
 
 static void monitor_hand_up_btn_create(Controls_location coordinate)
