@@ -11,6 +11,7 @@ extern void set_msg_text(lv_obj_t *msg, int state);
 extern bool wifi_connection_check_start(void);
 extern int wifi_connection_check_state(void);
 extern void wifi_connection_check_cancel(void);
+extern void wifi_link_info_refresh(void);
 
 extern void set_location(lv_obj_t *obj, int x, int y, int w, int h);
 
@@ -148,6 +149,7 @@ static void msg_task(struct _lv_task_t *task_t)
 				Debug("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&:%d\n", user_data_get()->wifi.wifi_connect_flag);
 
 				user_data_get()->wifi.wifi_connect_flag = true;
+				wifi_link_info_refresh();
 				user_data_save();
 				goto_layout(pLAYOUT(setting_wifi));
 				lv_obj_t *msg1 = connect_wifi_cb();

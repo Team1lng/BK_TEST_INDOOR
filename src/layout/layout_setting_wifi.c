@@ -12,6 +12,15 @@ int connectwifi_index = 0;
 int connected_wifi_max = 0;
 static void network_btn_up(lv_obj_t *obj);
 
+void wifi_link_info_refresh(void)
+{
+	bool continue_flag = true;
+
+	memset(&link_info, 0, sizeof(linked_info));
+	wpa_cli_wlan_status(&continue_flag);
+	get_linked_wifi_info(&link_info);
+}
+
 static void *wifi_page_scan_task(void *arg)
 {
 	bool continue_flag = true;
@@ -971,8 +980,7 @@ static void findwifi_wifibtn_create(lv_obj_t *parent)
 	int8_t sum = 0; // 划线的数量
 	connectwifi_index = 0;
 
-	memset(&link_info, 0, sizeof(linked_info));
-	get_linked_wifi_info(&link_info);
+	wifi_link_info_refresh();
 
 	if (link_info.completed)
 	{
@@ -1297,13 +1305,9 @@ void find_link_wifi(void)
 	if (!wifi_usb_module_enable())
 		return;
 
-	memset(&link_info, 0, sizeof(linked_info));
 	bool a = true;
 	wpa_cli_scan_wifi(&a);
-	extern bool wpa_cli_wlan_status(bool *continue_flag);
-	wpa_cli_wlan_status(&a); // 获取wifi状态 再获取链接WiFi的信息
-
-	get_linked_wifi_info(&link_info);
+	wifi_link_info_refresh();
 
 }
 
@@ -1313,6 +1317,7 @@ static void LAYOUT_ENETER_FUNC(setting_wifi)
 	setting_bg_display();
 	is_wifi_page_move = false;
 	wifi_control = true;
+	wifi_link_info_refresh();
 	// wpa_cli_scan_wifi(&wifi_control);
 	// wpa_cli_wlan_status(&wifi_control);
 	wifi_setting_display();
