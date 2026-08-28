@@ -1655,9 +1655,10 @@ static void monitor_talk_btn_up(lv_obj_t *obj)
 						(channel == MON_CH_DOOR_2 && get_outdoor_talk_state(MON_CH_DOOR_2));
 
 	Debug("===========================>>ch:%d   is_talking: %d\n", channel, is_talking);
-	if (!tuya_session_local_talk_allowed(tuya_client_num_get() > 0,
-									 tuya_monitor_state_get(),
-									 outdoor_busy))
+	if (!tuya_session_local_talk_button_allowed(is_talking,
+										tuya_client_num_get() > 0,
+										tuya_monitor_state_get(),
+										outdoor_busy))
 	{
 		monitor_tuya_busy_msgbox_create();
 		return;

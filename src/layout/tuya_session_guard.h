@@ -29,6 +29,10 @@ bool tuya_session_local_monitor_allowed(bool outdoor_busy,
 bool tuya_session_local_talk_allowed(bool local_video_client_active,
                                      bool background_tuya_monitor_active,
                                      bool outdoor_busy);
+bool tuya_session_local_talk_button_allowed(bool local_talk_active,
+                                            bool local_video_client_active,
+                                            bool background_tuya_monitor_active,
+                                            bool outdoor_busy);
 bool tuya_session_remote_busy_should_interrupt_ui(void);
 bool tuya_session_remote_channel_switch_allowed(bool local_monitor_active);
 bool tuya_session_preserve_outdoor_tuya_order(bool local_video_client_active);

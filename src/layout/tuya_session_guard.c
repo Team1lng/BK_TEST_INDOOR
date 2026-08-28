@@ -49,6 +49,17 @@ bool tuya_session_local_talk_allowed(bool local_video_client_active,
            !outdoor_busy;
 }
 
+bool tuya_session_local_talk_button_allowed(bool local_talk_active,
+                                            bool local_video_client_active,
+                                            bool background_tuya_monitor_active,
+                                            bool outdoor_busy)
+{
+    return local_talk_active ||
+           tuya_session_local_talk_allowed(local_video_client_active,
+                                           background_tuya_monitor_active,
+                                           outdoor_busy);
+}
+
 bool tuya_session_remote_busy_should_interrupt_ui(void)
 {
     return false;
