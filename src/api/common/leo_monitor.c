@@ -159,6 +159,10 @@ void monitor_open(bool reset)
 extern bool video_decode_pause(bool keep);
 void monitor_switch(void)
 {
+	extern bool indoor_is_local_monitoring(void);
+	bool tuya_background_session = monitor_enter_way_get() == MONITOR_ENTER_TUYA;
+	bool local_video_output = monitor_local_video_output_required(
+		tuya_background_session, indoor_is_local_monitoring());
 	// if(monitor_channel != MON_CH_DOOR_1 &&
 	// 	monitor_channel != MON_CH_DOOR_2)
 	// {
@@ -215,7 +219,7 @@ void monitor_switch(void)
 		video_decode_close();
 	}
 
-	if (get_video_decode_state() == false && monitor_enter_way_get() != MONITOR_ENTER_TUYA)
+	if (get_video_decode_state() == false && local_video_output)
 	{
 		video_decode_open(0, DECODE_WIDTH, DECODE_HIGHT); // 640, 360);
 	}
@@ -265,20 +269,14 @@ void monitor_switch(void)
 #endif
 	}
 
-	if (monitor_background_clear_required(monitor_enter_way_get() == MONITOR_ENTER_TUYA))
+	if (local_video_output)
 	{
 		extern bool system_bg_fill_color(unsigned int color, int x, int y, int w, int h);
 		system_bg_fill_color(0x00, 0, 0, 1024, 600);
-	}
-	if (monitor_enter_way_get() != MONITOR_ENTER_TUYA)
-	{
 		if (monitor_channel == MON_CH_DOOR_1 || monitor_channel == MON_CH_DOOR_2)
 			fb_video_mode_enable(device_online_state_get(monitor_channel + DEVICE_INDOOR_ID6));
 		else
 			fb_video_mode_enable(true);
-	}
-	else
-	{
 	}
 }
 
