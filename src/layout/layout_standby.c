@@ -644,8 +644,14 @@ void weather_anim_deleted_cb(struct _lv_obj_t *obj, lv_event_t event)
 
 void standby_weather_widgets_up(lv_obj_t *obj /* ,lv_event_t event */)
 {
-	// Debug("[TUYA_UI_TRACE] weather screen touch -> standby_click_up\n");
-	standby_click_up(obj);
+	(void)obj;
+	/* 天气控件位于待机界面，点击应停留在待机（不再像整屏点击那样跳主页）。
+	   仍沿用待机触摸门控，避免门口机通话中误触 */
+	bool outdoor_talking    = (monitor_enter_way_get() == MONITOR_ENTER_CALL);
+	bool tuya_client_active = tuya_client_num_get() > 0;
+	if (!tuya_session_standby_touch_allowed(outdoor_talking, tuya_client_active))
+		return;
+	goto_layout(pLAYOUT(standby));
 }
 
 void standby_weather_widgets_create(void)
