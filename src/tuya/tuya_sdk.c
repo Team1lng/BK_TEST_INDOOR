@@ -387,7 +387,7 @@ int tuya_notify_call_event(int ch, const uint8_t *jpeg_buf, int size)
     }
     tuya_ipc_notify_door_bell_press(jpeg_buf, size, NOTIFICATION_CONTENT_JPEG);
     tuya_ipc_dp_report(NULL, TUYA_DP_DOOR_BELL, PROP_STR, "tuya6", 1);
-    tuya_ipc_notify_alarm(jpeg_buf, size, ch == 0 ? NOTIFICATION_NAME_PASSBY : NOTIFICATION_NAME_CAR, TRUE, NULL);
+    tuya_ipc_notify_alarm(jpeg_buf, size, NOTIFICATION_NAME_DOORBELL, TRUE, NULL);
     return 0;
 }
 
