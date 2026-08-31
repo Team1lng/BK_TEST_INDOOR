@@ -44,8 +44,8 @@ NAME_SCRIPT=$(basename $0)                                                      
 if [ "$PATH_SCRIPT" != "$DIR_TMP" ];then                                        #判断脚本所在位置不在/tmp下
     cp $PATH_SCRIPT/$NAME_SCRIPT $DIR_TMP                                       #将脚本拷贝到/tmp下
     echo "$DIR_TMP/$NAME_SCRIPT $*"
-    $DIR_TMP/$NAME_SCRIPT $*                                                    #执行位于/tmp目录的
-    exit 0 ;
+    $DIR_TMP/$NAME_SCRIPT "$@"                                                 #执行位于/tmp目录的
+    exit $? ;
 fi
 
 CMD_CAT=$DIR_ROOT_TMP/bin/cat
@@ -203,12 +203,14 @@ dd_update()                                                                     
         NUM_MTD=`$CMD_$CMD_CAT /proc/mtd | $CMD_GREP -E "\"${2}\"$" | $CMD_GREP -Eo "^mtd[0-9]+" | $CMD_GREP -Eo "[0-9]+"`
         if [ -z $NUM_MTD ]; then                                                #判断分区mtd id是否存在
             $CMD_ECHO -e "\e["$CM_NORMAL";"$CF_RED";"$CB_BLACK"m""NUM_MTD NOT EXIST.""\e[0m"
-            return 0
+            UPDATE_FAILED=1
+            return 1
         else                                                                    #mtd id 存在
 
             check_file_md5 ${DIR_UPDATE}/$1 ${DIR_UPDATE}/$1.md5
             if [ "$?" = 0 ];then                                                #md5校验出错
-                exit 0
+                UPDATE_FAILED=1
+                return 1
             fi
 
             DEC_SIZE_FILE=`$CMD_STAT ${DIR_UPDATE}/$1 | $CMD_GREP -Eo "Size:\s+[0-9]+" | $CMD_GREP -Eo "[0-9]+"`
@@ -239,6 +241,8 @@ dd_update()                                                                     
 
             if [ $DEC_SIZE_FILE -gt $DEC_SIZE_PARTITION ]; then                 #文件大于分区
                 $CMD_ECHO -e "\e["$CM_NORMAL";"$CF_RED";"$CB_BLACK"m"" $1 - $DEC_SIZE_FILE > $2 - $DEC_SIZE_PARTITION""\e[0m"
+                UPDATE_FAILED=1
+                return 1
             else
                 if [ $NUM_BLOCK_ZERO -gt 0 ]; then                              #擦除block数大于0则调用CMD_DD_ZERO
                     #CMD_DD_ZERO="$CMD_DD if=/dev/zero of=/dev/mtdblock$NUM_MTD bs=$DEC_SIZE_ERASE count=$NUM_BLOCK_ZERO seek=$NUM_BLOCK_FILE conv=fsync"
@@ -246,17 +250,29 @@ dd_update()                                                                     
                     #$CMD_DD_ZERO
                     CMD_MTD_ERASE="$CMD_MTD_DEBUG erase /dev/mtd$NUM_MTD 0x0 0x$HEX_SIZE_PARTITION"
                     $CMD_ECHO -e "\e["$CM_NORMAL";"$CF_BLUE";"$CB_BLACK"m""$CMD_MTD_ERASE""\e[0m"
-                    $CMD_MTD_ERASE
+                    if ! $CMD_MTD_ERASE; then
+                        UPDATE_FAILED=1
+                        return 1
+                    fi
                     $CMD_ECHO -e "\e["$CM_NORMAL";"$CF_BLUE";"$CB_BLACK"m""$CMD_SYNC""\e[0m"
-                    $CMD_SYNC
+                    if ! $CMD_SYNC; then
+                        UPDATE_FAILED=1
+                        return 1
+                    fi
                 fi
 
                 CMD_DD_EXEC="$CMD_DD if=${DIR_UPDATE}/$1 of=/dev/mtdblock$NUM_MTD bs=$DEC_SIZE_ERASE count=$NUM_BLOCK_FILE conv=fsync"
                 $CMD_ECHO -e "\e["$CM_NORMAL";"$CF_BLUE";"$CB_BLACK"m""$CMD_DD_EXEC""\e[0m"
-                $CMD_DD_EXEC
+                if ! $CMD_DD_EXEC; then
+                    UPDATE_FAILED=1
+                    return 1
+                fi
                 $CMD_ECHO -e "\e["$CM_NORMAL";"$CF_BLUE";"$CB_BLACK"m""$CMD_SYNC""\e[0m"
-                $CMD_SYNC
-                let DD_UPDATE=1
+                if ! $CMD_SYNC; then
+                    UPDATE_FAILED=1
+                    return 1
+                fi
+                DD_UPDATE=1
             fi
         fi
     fi
@@ -271,6 +287,17 @@ kill_proc()
         echo -e "\e["$CM_NORMAL";"$CF_BLUE";"$CB_BLACK"m""Kill -9 $i""\e[0m"
         kill -9 $i
     done
+}
+
+update_failed_reboot()
+{
+    $CMD_ECHO "############ update failed #############"
+    if [ -n "$1" ]; then
+        rm -f "/app/data/$1"
+    fi
+    $CMD_SYNC
+    $CMD_REBOOT
+    exit 1
 }
                                                                                 #
                                                                                 # 升级脚本入口
@@ -306,17 +333,6 @@ if [ "$DIR_UPDATE" = "" ];then
     get_update_dir                                                              #定位升级文件的目录位置
     if [ "$?" = 0 ];then                                                        #未有升级文件退出
         echo "############ NO UPDATE FILES #############"
-
-        if [ -n "$1" ]; then
-            if mount | grep /app/data > /dev/null; then
-                $CMD_ECHO "############ data.jffs2 EXIST  #############"
-                if [ ! -e "/app/data/$1" ]; then
-                    touch /app/data/$1
-                    $CMD_ECHO "############ TOUCH /app/data/$1  #############"
-                fi
-            fi
-        fi
-
         sleep 1
         reboot
         exit 0
@@ -447,27 +463,28 @@ fi
 
 
 DD_UPDATE=0                                                                     #使用dd升级
-dd_update $FILE_ENV    $PARTITION_ENV
+UPDATE_FAILED=0
+dd_update $FILE_ENV    $PARTITION_ENV || update_failed_reboot "$1"
 echo 1 > /tmp/proc_value
-dd_update $FILE_ENV    $PARTITION_BKENV
+dd_update $FILE_ENV    $PARTITION_BKENV || update_failed_reboot "$1"
 echo 2 > /tmp/proc_value
-dd_update $FILE_DTB    $PARTITION_DTB
+dd_update $FILE_DTB    $PARTITION_DTB || update_failed_reboot "$1"
 echo 3 > /tmp/proc_value
-dd_update $FILE_KERNEL $PARTITION_KERNEL
+dd_update $FILE_KERNEL $PARTITION_KERNEL || update_failed_reboot "$1"
 echo 4 > /tmp/proc_value
-dd_update $FILE_LOGO   $PARTITION_LOGO
+dd_update $FILE_LOGO   $PARTITION_LOGO || update_failed_reboot "$1"
 echo 5 > /tmp/proc_value
-dd_update $FILE_ETC    $PARTITION_ETC
+dd_update $FILE_ETC    $PARTITION_ETC || update_failed_reboot "$1"
 echo 6 > /tmp/proc_value
-dd_update $FILE_USR    $PARTITION_USR
+dd_update $FILE_USR    $PARTITION_USR || update_failed_reboot "$1"
 echo 7 > /tmp/proc_value
-dd_update $FILE_APP    $PARTITION_APP
+dd_update $FILE_APP    $PARTITION_APP || update_failed_reboot "$1"
 echo 8 > /tmp/proc_value
-dd_update $FILE_TUYA   $PARTITION_TUYA
+dd_update $FILE_TUYA   $PARTITION_TUYA || update_failed_reboot "$1"
 echo 9 > /tmp/proc_value
-dd_update $FILE_DATA   $PARTITION_DATA
+dd_update $FILE_DATA   $PARTITION_DATA || update_failed_reboot "$1"
 echo 10 > /tmp/proc_value
-dd_update $FILE_ROOT   $PARTITION_ROOT
+dd_update $FILE_ROOT   $PARTITION_ROOT || update_failed_reboot "$1"
 echo 11 > /tmp/proc_value
 
 
@@ -476,19 +493,19 @@ $CMD_ECHO 1 > /sys/class/gpio/gpio34/value
 $CMD_SLEEP 1
 
 
-if [ "$DD_UPDATE" = 1 ];then
-    if [ -n "$1" ]; then
-        if mount | grep /app/data > /dev/null; then
-            $CMD_ECHO "############ data.jffs2 EXIST  #############"
-            if [ ! -e "/app/data/$1" ]; then
-                touch /app/data/$1
-                $CMD_ECHO "############ TOUCH /app/data/$1  #############"
-            fi
-        fi
+if [ "$DD_UPDATE" = 1 ] && [ "$UPDATE_FAILED" = 0 ];then
+    if [ -n "$1" ] && mount | grep /app/data > /dev/null; then
+        $CMD_ECHO "############ data.jffs2 EXIST  #############"
+        rm -f /app/data/SAT_ANYKAOS*
+        touch "/app/data/$1"
+        $CMD_ECHO "############ TOUCH /app/data/$1  #############"
+        $CMD_SYNC
     fi
 
     $CMD_ECHO "############ update success, reboot now #############"
     $CMD_SLEEP 1
     $CMD_ECHO -e "\e["$CM_NORMAL";"$CF_BLUE";"$CB_BLACK"m""$CMD_REBOOT""\e[0m"
     $CMD_REBOOT
+else
+    update_failed_reboot "$1"
 fi
