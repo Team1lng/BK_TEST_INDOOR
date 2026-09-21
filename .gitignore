@@ -16,3 +16,17 @@ output/
 *.cache
 *.depend
 *.o
+
+# 日志文件
+*.log
+
+# CTest / CMake 测试产物
+Testing/
+
+# make.sh 编译输出（升级包与压缩包）
+SAT_ANYKAOS_*
+*.tar.gz
+
+# 根目录临时截图
+/33.png
+/44.png
