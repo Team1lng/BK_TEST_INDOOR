@@ -36,3 +36,6 @@ SAT_ANYKAOS_*
 
 # 一次性脚本（已不再使用）
 /fix_language_xls.py
+# 忽略OTA升级二进制产物
+upgrade/app/ANYKA37E.BIN
+upgrade/platform/app.sqsh4
