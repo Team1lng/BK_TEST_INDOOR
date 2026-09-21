@@ -1,3 +1,12 @@
+版本：3.0.8 2026-08-27
+1、修复待机背景泄漏监控画面（3.0.7 未生效的根因修正）：经日志验证，退出 monitor 回 standby 后 monitor_enter_way 被 standby 进入逻辑重置成 NONE(0)，3.0.7 在 keep_tuya_video 分支设的 TUYA 没能保持；手机切通道时 enter_way=NONE，monitor_switch()(leo_monitor.c:160) 的 :218/:282 用 `enter_way != TUYA` 判断，NONE!=TUYA 成立→误开 video_decode_open + fb_video_mode_enable(true)，门口机视频透过透明 GUI 背景显示到待机。该判断把 NONE(待机未监控)错算进"要开本地解码"。修复：:218 和 :282 的判断从 `monitor_enter_way_get() != MONITOR_ENTER_TUYA` 改为 `indoor_is_local_monitoring()`(=way∈{MANUAL/CALL/MONTION/ALARM}，只在真正本地监控时开解码/透明背景)。这样待机(NONE)或手机监控(TUYA)切通道时只切网络推流通道(network_video_receive_package_open)，不开本地解码/不设透明背景→待机不再泄漏；室内机本地监控切通道时 indoor_is_local_monitoring()=true 仍正常开解码。leo_monitor.c 加 extern bool indoor_is_local_monitoring(void) 声明。保留 [LEAK_TRACE] 诊断打印供二次验证，验证通过后可删。
+
+版本：3.0.7 2026-08-27
+1、修复待机背景泄漏监控画面：手机监视中→室内机点监控后退出→手机切通道，待机背景出现门口机画面。根因：LAYOUT_QUIT_FUNC(monitor) 的 keep_tuya_video 分支(layout_monitor.c:2489)只关 fb_video_mode+video_decode，未把 monitor_enter_way 恢复成 TUYA，残留为室内机进监控时设的 MANUAL；导致手机切通道触发 monitor_switch()(leo_monitor.c:160)时 :218(enter_way!=TUYA)误开 video_decode_open、:273(enter_way!=TUYA)误 fb_video_mode_enable(true)，门口机视频透过透明 GUI 背景显示到待机。修复：keep_tuya_video 分支补 monitor_enter_way_set(MONITOR_ENTER_TUYA)，让"手机仍在监控"语义正确。
+
+版本：3.0.6 2026-08-27
+1、待机界面天气控件点击改为停留在待机：原 standby_weather_widgets_up 调用 standby_click_up，背光正常时整屏点击逻辑会跳主页(home)；改为天气点击直接 goto_layout(standby)，并保留待机触摸门控(tuya_session_standby_touch_allowed)避免门口机通话中误触。layout_standby.c:645。
+
 版本：3.0.5 2026-08-20
 1、修复手机Tuya监控+室内机本地监控并存时手机对讲无音频：SPEAKER_START门控原以indoor_is_local_monitoring()(含MANUAL被动监控)拒绝手机对讲，导致门口机talk通道未建立；新增indoor_is_local_talking()(仅=MONITOR_ENTER_CALL)，三处门控(ty_sdk_media_callback.c:195、layout_monitor.c:536/669)改为只拦主动通话(CALL)或内线(interphone)，放行被动监控。indoor_is_local_monitoring()本体及其频道切换守卫(layout_monitor.c:628)不变。
 2、修复language.xls camera区段文本错位：xls中"Camera IP address"被插在"Channel switch/Main stream/Sub stream"之前，与STR枚举(layout_define.h:252-260)顺序不符，导致Camera model下面显示IP地址、通道切换标签错位；已重排为 Camera model→Dahua→Hikvision→Channel switch→Main stream→Sub stream→Camera IP address→Account→Password（同步改 src/layout/resource/language/language.xls 与 upgrade/app/language.xls）。

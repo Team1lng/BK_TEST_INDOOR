@@ -26,14 +26,21 @@ static void cctv_diag_monitor_config(const char *stage, MONITOR_CH channel, cons
 		camera->url[0] == 'r', invalid);
 }
 
-static const char *monitor_cctv_url_get(const camera_info *camera, char *buf, size_t buf_size)
+// 码流选择存在 user_data_info.camera_stream[]，由 monitor_device_init() 把指针挂进 moniotr_config。
+// Stech 主/子码流 URL 相同，已经不能再从 URL 反解码流。
+static cctv_stream_type monitor_cctv_stream_get(const int *stream)
+{
+	return (stream != NULL && *stream == CCTV_STREAM_SUB) ? CCTV_STREAM_SUB : CCTV_STREAM_MAIN;
+}
+
+static const char *monitor_cctv_url_get(const camera_info *camera, cctv_stream_type stream, char *buf, size_t buf_size)
 {
 	if (camera->url[0] == 'r')
 	{
 		return camera->url;
 	}
 
-	cctv_stream_url_build(buf, buf_size, camera->model, cctv_stream_from_url(camera->url),
+	cctv_stream_url_build(buf, buf_size, camera->model, stream,
 		camera->account, camera->pwd, camera->ip);
 	return buf;
 }
@@ -113,10 +120,11 @@ void monitor_open(bool reset)
 	{
 		video_decode_open(0, DECODE_WIDTH, DECODE_HIGHT); // 640, 360);
 		cctv_diag_monitor_config("monitor_open", monitor_channel, monitor_config_get()->cctv1,
-			cctv_stream_from_url(monitor_config_get()->cctv1->url));
+			monitor_cctv_stream_get(monitor_config_get()->cctv1_stream));
 
 	#ifndef DHCP_IPCAMERA
-		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv1, buf, sizeof(buf));
+		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv1,
+			monitor_cctv_stream_get(monitor_config_get()->cctv1_stream), buf, sizeof(buf));
 		Debug_Lib("==>>%s\n\n\n\n\n", url);
 		rtsp_stream_open((char *)url);
 #else
@@ -128,10 +136,11 @@ void monitor_open(bool reset)
 	{
 		video_decode_open(0, DECODE_WIDTH, DECODE_HIGHT); // 640, 360);
 		cctv_diag_monitor_config("monitor_open", monitor_channel, monitor_config_get()->cctv2,
-			cctv_stream_from_url(monitor_config_get()->cctv2->url));
+			monitor_cctv_stream_get(monitor_config_get()->cctv2_stream));
 
 	#ifndef DHCP_IPCAMERA
-		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv2, buf, sizeof(buf));
+		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv2,
+			monitor_cctv_stream_get(monitor_config_get()->cctv2_stream), buf, sizeof(buf));
 		Debug_Lib("==>>%s\n\n\n\n\n", url);
 		rtsp_stream_open((char *)url);
 #else
@@ -239,10 +248,11 @@ void monitor_switch(void)
 	else if (monitor_channel == MON_CH_CCTV_1 && monitor_config_get()->cctv1 != NULL)
 	{
 		cctv_diag_monitor_config("monitor_switch", monitor_channel, monitor_config_get()->cctv1,
-			cctv_stream_from_url(monitor_config_get()->cctv1->url));
+			monitor_cctv_stream_get(monitor_config_get()->cctv1_stream));
 
 	#ifndef DHCP_IPCAMERA
-		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv1, buf, sizeof(buf));
+		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv1,
+			monitor_cctv_stream_get(monitor_config_get()->cctv1_stream), buf, sizeof(buf));
 		Debug_Lib("==>>%s\n\n\n\n\n", url);
 		rtsp_stream_open((char *)url);
 #else
@@ -257,10 +267,11 @@ void monitor_switch(void)
 	else if (monitor_channel == MON_CH_CCTV_2 && monitor_config_get()->cctv2 != NULL)
 	{
 		cctv_diag_monitor_config("monitor_switch", monitor_channel, monitor_config_get()->cctv2,
-			cctv_stream_from_url(monitor_config_get()->cctv2->url));
+			monitor_cctv_stream_get(monitor_config_get()->cctv2_stream));
 
 	#ifndef DHCP_IPCAMERA
-		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv2, buf, sizeof(buf));
+		const char *url = monitor_cctv_url_get(monitor_config_get()->cctv2,
+			monitor_cctv_stream_get(monitor_config_get()->cctv2_stream), buf, sizeof(buf));
 		Debug_Lib("==>>%s\n\n\n\n\n", url);
 		rtsp_stream_open((char *)url);
 #else

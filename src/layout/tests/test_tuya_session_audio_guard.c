@@ -21,5 +21,11 @@ int main(void)
     assert(!tuya_session_local_talk_allowed(false, true, false));
     assert(!tuya_session_local_talk_allowed(false, false, true));
 
+    assert(tuya_session_local_talk_button_allowed(true, true, true, true));
+    assert(tuya_session_local_talk_button_allowed(false, false, false, false));
+    assert(!tuya_session_local_talk_button_allowed(false, true, false, false));
+    assert(!tuya_session_local_talk_button_allowed(false, false, true, false));
+    assert(!tuya_session_local_talk_button_allowed(false, false, false, true));
+
     return 0;
 }

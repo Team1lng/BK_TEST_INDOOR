@@ -252,6 +252,7 @@ enum btn_string_id
     STR_CAMERA_MODEL,
     STR_DAHUA,
     STR_HIKVISION,
+    STR_STECH,
     STR_CHANNEL_SWITCH,
     STR_MAIN_STREAM,
     STR_SUB_STREAM,

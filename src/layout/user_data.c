@@ -8,6 +8,7 @@
 #include "stdlib.h"
 #include "layout_define.h"
 #include "ak_drv_wdt.h"
+#include "../api/common/cctv_stream_policy.h"
 
 static user_data_info user_data = {0};
 
@@ -178,6 +179,8 @@ static user_data_info user_data_default = {
 
 	.pairing_mode = WLAN_NET,
 	.allocation_mode = STATIC_ALLOC,
+
+	.camera_stream = {CCTV_STREAM_MAIN, CCTV_STREAM_MAIN},
 };
 
 #define user_data_check_range_out(cur, min, max)                           \
@@ -808,11 +811,36 @@ static void *user_data_task(void *arg)
 	return NULL;
 }
 
+/***
+** 兼容旧配置: 老版本把"主/子码流"编码在 camera.url 里，新版本改用 camera_stream[] 保存。
+** 只在 URL 明确是子码流时上调，从不下调 —— 幂等，也不会覆盖新字段里已存的选择
+** (Stech 主/子码流 URL 相同，URL 恒解析成主码流，必须避免覆盖)。
+***/
+static void camera_stream_load_fixup(void)
+{
+	const camera_info *camera[2] = {&user_data.camera1, &user_data.camera2};
+	int i;
+
+	for (i = 0; i < 2; i++)
+	{
+		if ((user_data.camera_stream[i] != CCTV_STREAM_MAIN) && (user_data.camera_stream[i] != CCTV_STREAM_SUB))
+		{
+			user_data.camera_stream[i] = CCTV_STREAM_MAIN;
+		}
+
+		if (cctv_stream_from_url(camera[i]->url) == CCTV_STREAM_SUB)
+		{
+			user_data.camera_stream[i] = CCTV_STREAM_SUB;
+		}
+	}
+}
+
 bool user_data_init(void)
 {
 	ak_pthread_t pthread_id;
 
-	monitor_device_init(&user_data_get()->door1, &user_data_get()->door2, &user_data_get()->camera1, &user_data_get()->camera2);
+	monitor_device_init(&user_data_get()->door1, &user_data_get()->door2, &user_data_get()->camera1, &user_data_get()->camera2,
+		&user_data_get()->camera_stream[0], &user_data_get()->camera_stream[1]);
 
 	int fd = open(USER_DATA_PATH, O_RDONLY);
 	if (fd < 0)
@@ -829,6 +857,8 @@ bool user_data_init(void)
 
 	close(fd);
 	app_updata_check();
+
+	camera_stream_load_fixup();
 
 	if ((user_data.other.network_device < 1) || (user_data.other.network_device > 6))
 	{
