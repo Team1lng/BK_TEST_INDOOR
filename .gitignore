@@ -30,3 +30,9 @@ SAT_ANYKAOS_*
 # 根目录临时截图
 /33.png
 /44.png
+
+# 本地工作区缓存
+.workbuddy/
+
+# 一次性脚本（已不再使用）
+/fix_language_xls.py
