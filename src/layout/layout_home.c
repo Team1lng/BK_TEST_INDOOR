@@ -1,9 +1,22 @@
+/*******************************************************************
+ * 主页界面（layout_home.c）
+ *
+ * 功能：创建主页各功能模块的入口按钮，并分发点击行为。
+ *   - home_module_list            定义模块顺序；
+ *   - HOME_MODULE_COORDINATE_INIT 提供按钮坐标，两者按下标一一对应；
+ *   - 实际创建顺序见文件末尾的 LAYOUT_ENETER_FUNC(home)。
+ *   以上三处增删模块时必须同步修改，否则按钮会错位。
+ *
+ * 依赖：layout_define.h（控件 / 语言 / 页面跳转）、leo_api.h
+ * 创建：2026-02-08 · 本次仅整理注释与格式，未改动任何代码逻辑
+ *******************************************************************/
+
 #include "layout_define.h"
 #include "leo_api.h"
 
+// 主页功能模块的顺序编号
 typedef enum home_module_list
 {
-
 	SETTING_MODULE,
 	MONITOR_MODULE,
 	EVENT_MODULE,
@@ -19,6 +32,7 @@ typedef enum home_module_list
 	TOTAL_MODULE
 } home_module_list;
 
+// 各模块按钮的坐标表，顺序必须与 home_module_list 一致
 #define HOME_MODULE_COORDINATE_INIT { \
 	{157, 100, 130, 130},             \
 	{356, 100, 130, 130},             \
@@ -30,8 +44,10 @@ typedef enum home_module_list
 	{752, 320, 130, 130},             \
 };
 
+// 主页是否正在显示（延时任务据此判断用户是否已离开主页）
 static bool layout_is_home;
 
+// 创建带文字标签的主页模块按钮（希伯来语下自动切换为 RTL 排版）
 lv_obj_t *home_btn_create_1(Controls_location coordinate, char *string, btn_data *btn_pdata, const void *img_src1, const void *img_src2)
 {
 	lv_obj_t *btn = lv_btn_create(lv_scr_act(), NULL);
@@ -77,9 +93,9 @@ lv_obj_t *home_btn_create_1(Controls_location coordinate, char *string, btn_data
 	return btn;
 }
 
+// 创建仅带图标的主页模块按钮（无文字标签）
 lv_obj_t *home_btn_create_2(Controls_location coordinate, btn_data *btn_pdata, const void *img_src1, const void *img_src2)
 {
-
 	lv_obj_t *btn = lv_btn_create(lv_scr_act(), NULL);
 
 	lv_obj_set_pos(btn, coordinate.x, coordinate.y);
@@ -103,10 +119,12 @@ lv_obj_t *home_btn_create_2(Controls_location coordinate, btn_data *btn_pdata, c
 	return btn;
 }
 
+// 空实现：Transfer 按钮按下时不做处理
 static void home_transfer_btn_down(lv_obj_t *obj)
 {
 }
 
+// Transfer 按钮抬起：音频被占用时拦截，否则进入转呼页
 static void home_transfer_btn_up(lv_obj_t *obj)
 {
 	if (tuya_audio_occupied_check())
@@ -118,7 +136,7 @@ static void home_transfer_btn_up(lv_obj_t *obj)
 #endif
 }
 
-// 创建Transfer按钮
+// 创建 Transfer 按钮（转呼 / 户户通）
 static void home_transfer_btn_create(Controls_location **coordinate)
 {
 	static btn_data btn_data = btn_data_create(home_transfer_btn_down, home_transfer_btn_up, NULL);
@@ -132,12 +150,13 @@ static void home_Setting_btn_down(lv_obj_t *obj)
 {
 }
 
+// Setting 按钮抬起：进入设置页
 static void home_Setting_btn_up(lv_obj_t *obj)
 {
 	goto_layout(pLAYOUT(setting));
 }
 
-// 创建Setting按钮
+// 创建 Setting 按钮
 static void home_Setting_btn_create(Controls_location **coordinate)
 {
 	static btn_data btn_data = btn_data_create(home_Setting_btn_down, home_Setting_btn_up, NULL);
@@ -147,10 +166,12 @@ static void home_Setting_btn_create(Controls_location **coordinate)
 	(*coordinate)++;
 }
 
+// 空实现：Monitoring 按钮按下时不做处理
 static void home_Monitoring_btn_down(lv_obj_t *obj)
 {
 }
 
+// Monitoring 按钮抬起：音频被占用时拦截，否则进入监控页
 static void home_Monitoring_btn_up(lv_obj_t *obj)
 {
 	if (tuya_audio_occupied_check())
@@ -159,7 +180,7 @@ static void home_Monitoring_btn_up(lv_obj_t *obj)
 	goto_layout(pLAYOUT(monitor_1));
 }
 
-// 创建Monitoring按钮
+// 创建 Monitoring 按钮
 static void home_Monitoring_create(Controls_location **coordinate)
 {
 	static btn_data btn_data = btn_data_create(home_Monitoring_btn_down, home_Monitoring_btn_up, NULL);
@@ -169,6 +190,7 @@ static void home_Monitoring_create(Controls_location **coordinate)
 	(*coordinate)++;
 }
 
+// Media 按钮抬起：音频被占用时拦截，否则进入多媒体页
 static void home_media_btn_up(lv_obj_t *obj)
 {
 	if (tuya_audio_occupied_check())
@@ -176,7 +198,7 @@ static void home_media_btn_up(lv_obj_t *obj)
 	goto_layout(pLAYOUT(media));
 }
 
-// 创建Media按钮
+// 创建 Media 按钮
 static void home_media_btn_create(Controls_location **coordinate)
 {
 	static btn_data btn_data = btn_data_create(NULL, home_media_btn_up, NULL);
@@ -186,6 +208,7 @@ static void home_media_btn_create(Controls_location **coordinate)
 	(*coordinate)++;
 }
 
+// Event 按钮抬起：音频被占用时拦截，否则进入事件页
 static void home_event_btn_up(lv_obj_t *obj)
 {
 	if (tuya_audio_occupied_check())
@@ -193,7 +216,7 @@ static void home_event_btn_up(lv_obj_t *obj)
 	goto_layout(pLAYOUT(event));
 }
 
-// 创建Event按钮
+// 创建 Event 按钮
 static void home_event_btn_create(Controls_location **coordinate)
 {
 	static btn_data btn_data = btn_data_create(NULL, home_event_btn_up, NULL);
@@ -203,6 +226,7 @@ static void home_event_btn_create(Controls_location **coordinate)
 	(*coordinate)++;
 }
 
+// 按当前场景模式（在家 / 不在家 / 免打扰）返回对应的按钮图标
 static rom_bin_info *home_model_info_get(int is_focus)
 {
 	if (user_data_get()->other.model == AT_HOME_PATTERN)
@@ -246,6 +270,8 @@ static rom_bin_info *home_model_info_get(int is_focus)
 	}
 	return NULL;
 }
+
+// 按当前场景模式返回对应的按钮文字
 static char *home_model_str_get(void)
 {
 	if (user_data_get()->other.model == AT_HOME_PATTERN)
@@ -263,6 +289,8 @@ static char *home_model_str_get(void)
 	return NULL;
 }
 
+// 切换场景模式：免打扰 -> 在家 -> 不在家 -> 免打扰
+// 注：不在家会临时打开门1/门2的留言与录像开关，离开该模式时恢复用户原设置
 void home_Model_btn_switch(void)
 {
 	static bool manual_set_record1_mode = false;
@@ -321,13 +349,17 @@ void home_Model_btn_switch(void)
 	}
 }
 
+// Gate1 是否已开锁（置 1 期间忽略重复点击）
 static bool home_Gate1_flag;
 
+// 主页是否正在显示（延时任务用）
 static bool layout_is_home;
+// Gate1 自动关锁延时任务句柄
 static lv_task_t *ungate1_task_t = NULL;
+
+// Gate1 开锁后的自动关锁任务
 static void home_ungate1_task(lv_task_t *task_t)
 {
-
 	if (!layout_is_home)
 	{
 		lv_task_del(ungate1_task_t);
@@ -352,6 +384,7 @@ static void home_ungate1_task(lv_task_t *task_t)
 	tuya_door_lock_report(TUYA_DOOR_LOCK2, false);
 }
 
+// Gate1 开锁：下发门口机开锁命令、上报涂鸦、并启动自动关锁延时
 void home_gate1_control(void)
 {
 	if (home_Gate1_flag == 0)
@@ -385,12 +418,14 @@ void home_gate1_control(void)
 		home_Gate1_flag = 1;
 	}
 }
+
+// Gate1 按钮抬起回调
 static void home_Gate1_btn_up(lv_obj_t *obj)
 {
 	home_gate1_control();
 }
 
-// 创建Lock按钮
+// 创建 Gate1 开锁按钮（对象 ID=6，供上面的任务与控制函数反查）
 static void home_Gate1_btn_create(Controls_location **coordinate)
 {
 	static btn_data btn_data = btn_data_create(NULL, home_Gate1_btn_up, NULL);
@@ -406,9 +441,10 @@ static void home_Gate1_btn_create(Controls_location **coordinate)
 static bool home_Light_flag;
 
 static lv_task_t *Light_task_t = NULL;
+
+// 灯光 / 门锁2 的自动关闭延时任务
 static void home_Light_task(lv_task_t *task_t)
 {
-
 	if (!layout_is_home)
 	{
 		unlock_gpio_set(0);
@@ -434,6 +470,7 @@ static void home_Light_task(lv_task_t *task_t)
 	unlock_gpio_set(0);
 }
 
+// 灯光 / 门锁2 开关控制（HOME_LIGHT_EN 开启时为灯光，否则为门锁2）
 void home_Light_control(void)
 {
 	if ((home_Light_flag = !home_Light_flag))
@@ -463,12 +500,14 @@ void home_Light_control(void)
 		home_Light_task(NULL);
 	}
 }
+
+// 灯光按钮抬起回调
 static void home_Light_btn_up(lv_obj_t *obj)
 {
 	home_Light_control();
 }
 
-// 创建Lock按钮
+// 创建灯光按钮（对象 ID=7）—— 原注释误写为 Lock，已更正
 static void home_Light_btn_create(Controls_location **coordinate)
 {
 	static btn_data btn_data = btn_data_create(NULL, home_Light_btn_up, NULL);
@@ -483,9 +522,10 @@ static void home_Light_btn_create(Controls_location **coordinate)
 static bool home_Gate2_flag;
 
 static lv_task_t *ungate2_task_t = NULL;
+
+// Gate2 自动关锁延时任务
 static void home_ungate2_task(lv_task_t *task_t)
 {
-
 	if (!layout_is_home)
 	{
 		unlock_gpio_set(0);
@@ -513,6 +553,7 @@ static void home_ungate2_task(lv_task_t *task_t)
 	unlock_gpio_set(0);
 }
 
+// Gate2 开锁：本机 GPIO 开锁、上报涂鸦、并启动自动关锁延时
 void home_gate2_control(void)
 {
 	if (home_Gate2_flag == 0)
@@ -541,12 +582,13 @@ void home_gate2_control(void)
 	}
 }
 
+// Gate2 按钮抬起回调
 static void home_Gate2_btn_up(lv_obj_t *obj)
 {
 	home_gate2_control();
 }
 
-// 创建Lock按钮
+// 创建 Gate2 开锁按钮（对象 ID=7）
 static void home_Gate2_btn_create(Controls_location **coordinate)
 {
 	static btn_data btn_data = btn_data_create(NULL, home_Gate2_btn_up, NULL);
@@ -559,16 +601,18 @@ static void home_Gate2_btn_create(Controls_location **coordinate)
 }
 #endif
 
+// 空实现：Standby 按钮按下时不做处理
 static void home_Standby_btn_down(lv_obj_t *obj)
 {
 }
 
+// Standby 按钮抬起：返回待机界面
 static void home_Standby_btn_up(lv_obj_t *obj)
 {
 	goto_layout(pLAYOUT(standby));
 }
 
-// 创建Standby按钮
+// 创建 Standby 按钮
 static void home_Standby_btn_create(Controls_location **coordinate)
 {
 	static btn_data btn_data = btn_data_create(home_Standby_btn_down, home_Standby_btn_up, NULL);
@@ -583,7 +627,7 @@ static void back_btn_up(lv_obj_t *obj)
 	goto_layout(pLAYOUT(standby));
 }
 
-// 创建back按钮
+// 创建返回按钮（位置尺寸固定，供其他页面直接复用）
 lv_obj_t *home_back_btn_create(void (*back_btn_up)(lv_obj_t *), void (*back_btn_down)(lv_obj_t *))
 {
 	static btn_data btn_data;
@@ -598,6 +642,7 @@ lv_obj_t *home_back_btn_create(void (*back_btn_up)(lv_obj_t *), void (*back_btn_
 	return home_btn_create_2(coordinate, &btn_data, &info, &info1);
 }
 
+// 线程入口：后台扫描一次 WiFi 列表
 static void *wpa_cli_scan_wifi_task(void *arg)
 {
 	bool a = true;
@@ -606,12 +651,16 @@ static void *wpa_cli_scan_wifi_task(void *arg)
 	return NULL;
 }
 
+// 门口机 Gate2 远程开锁的回调
 static void home_gate2_unlock_callback(unsigned long arg1, unsigned long arg2)
 {
 	home_gate2_control();
 }
 
+// 是否需要重新加载主页背景（供其他模块查询）
 bool need_load_bg_flag = false;
+
+// 进入主页布局：创建全部模块按钮，注册状态与开锁回调
 static void LAYOUT_ENETER_FUNC(home)
 {
 	Debug("================================\n\r");
@@ -672,6 +721,7 @@ static void LAYOUT_ENETER_FUNC(home)
 	Debug("================================\n\r");
 }
 
+// 退出主页布局：注销回调并关闭可能残留的提示窗口
 static void LAYOUT_QUIT_FUNC(home)
 {
 	Debug("======LAYOUT_QUIT_FUNC=====>>\n\n");
@@ -688,6 +738,7 @@ static void LAYOUT_QUIT_FUNC(home)
 
 CREATE_LAYOUT(home);
 
+// 重复 ID 提示窗口的「否」按钮
 static void window_no_btn_up(lv_obj_t *obj)
 {
 	lv_obj_t *window_cont = lv_obj_get_child_form_id(lv_scr_act(), 888);
@@ -697,6 +748,7 @@ static void window_no_btn_up(lv_obj_t *obj)
 	}
 }
 
+// 创建设备 ID 重复提示窗口（window_yse_btn_up 为「是」按钮回调）
 static void ID_repeat_window_create(void (*window_yse_btn_up)(lv_obj_t *), char *str)
 {
 	lv_obj_t *window_cont = lv_cont_create(lv_scr_act(), NULL);
@@ -744,6 +796,7 @@ static void ID_repeat_window_create(void (*window_yse_btn_up)(lv_obj_t *), char 
 	btn_touch_event_listen(window_cancel_btn);
 }
 
+// 重复 ID 提示窗口的「是」按钮：关闭窗口并跳转设置页
 static void window_device_id_repeat_yse_btn_up(lv_obj_t *obj)
 {
 	lv_obj_t *window_cont = lv_obj_get_child_form_id(lv_scr_act(), 888);
@@ -754,6 +807,7 @@ static void window_device_id_repeat_yse_btn_up(lv_obj_t *obj)
 	goto_layout(pLAYOUT(setting_sys));
 }
 
+// 检测到设备 ID 重复时弹窗提示；若窗口已打开则按状态自动关闭
 void device_id_repeat_func(unsigned long arg1, unsigned long arg2)
 {
 	lv_obj_t *window_cont = lv_obj_get_child_form_id(lv_scr_act(), 888);
