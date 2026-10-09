@@ -42,7 +42,7 @@ if(CMAKE_FRENCH_ENABLE)
 	add_definitions(-DLANGUAGE_FRENCH_ENABLE)
 	add_definitions(-DIPC_APP_VERSION="2.1.8")
 else()
-	add_definitions(-DIPC_APP_VERSION="9.9.9")
+	add_definitions(-DIPC_APP_VERSION="2.1.9")
 endif()
 
 #定制PID

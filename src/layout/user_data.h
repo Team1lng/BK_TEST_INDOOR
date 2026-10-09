@@ -107,6 +107,7 @@ typedef struct
 	// char senser_records;
 	// char motion_records;
 	bool MD_preview;
+	bool md_push_notification; // MD Push notification 开关（移动侦测推送通知）
 	int language;
 	char unlock_time;
 	USER_WORK_PATTERN model;

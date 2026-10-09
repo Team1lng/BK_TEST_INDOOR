@@ -93,6 +93,7 @@ static user_data_info user_data_default = {
 	//.other.senser_records = 0,
 	//.other.motion_records = 0,
 	.other.MD_preview = 0,
+	.other.md_push_notification = false, // MD Push notification 默认关闭
 	.other.date_format = 0, // 0:年-月-日, 1:月-日-年, 2:日-月-年
 
 	.other.unlock_time = 2,
