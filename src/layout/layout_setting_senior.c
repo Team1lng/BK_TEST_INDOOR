@@ -19,11 +19,16 @@ typedef enum senior_module_list
 	WEATHER_SWITCH_MODULE,
 	WEATHER_DURATION_MODULE,
 #endif
+#ifdef STECH_VERSION
+	UNBIND_TUYA_MODULE,
+	MD_PUSH_NOTIFICATION_MODULE,
+#endif
 	TOTAL_MODULE
 } senior_module_list;
 
 #define SENIOR_MODULE_COORDINATE_INIT { \
-	{199, 75, 700, 52},                 \
+	{199, 23, 700, 52},                 \
+	{199, 75, 700, 52},                \
 	{199, 127, 700, 52},                \
 	{199, 179, 700, 52},                \
 	{199, 231, 700, 52},                \
@@ -1109,6 +1114,32 @@ static void senior_unbind_tuya_set_btn_create(Controls_location **coordinate)
 	sys_setting_btn_create(**coordinate, str, text_str(STR_TUYA_UNBIND), &btn_data3, NULL, &btn_data1);
 	(*coordinate)++;
 }
+
+static void senior_md_push_notification_btn_up_1(lv_obj_t *obj)
+{
+	btn_data *pdata = (btn_data *)obj->user_data;
+	lv_obj_t *obj1 = (lv_obj_t *)pdata->user_data;
+	lv_obj_set_state(obj1, LV_STATE_DEFAULT);
+
+	lv_obj_t *btn = lv_obj_get_child_form_id(lv_scr_act(), MD_PUSH_NOTIFICATION_MODULE);
+	user_data_get()->other.md_push_notification = !user_data_get()->other.md_push_notification;
+	lv_obj_set_style_local_value_str(btn, LV_OBJ_PART_MAIN, LV_STATE_DEFAULT,
+		text_str(user_data_get()->other.md_push_notification ? STR_ON : STR_OFF));
+}
+
+static void senior_md_push_notification_btn_create(Controls_location **coordinate)
+{
+	static btn_data btn_data1 = btn_data_create(senior_set_btn_syn_down, senior_md_push_notification_btn_up_1, NULL);
+	static btn_data btn_data3 = btn_data_create(NULL, senior_md_push_notification_btn_up_1, NULL);
+	btn_data1.OPS_ANYTHING = senior_set_btn_syn_event;
+	btn_data3.OPS_ANYTHING = senior_set_btn_syn_event;
+	lv_obj_t *btn = sys_setting_btn_create(**coordinate,
+		text_str(user_data_get()->other.md_push_notification ? STR_ON : STR_OFF),
+		text_str(STR_MD_PUSH_NOTIFICATION), &btn_data3, NULL, &btn_data1);
+	lv_obj_set_id(btn, MD_PUSH_NOTIFICATION_MODULE);
+	(*coordinate)++;
+	printf("%s :%p\n\r", __func__, btn);
+}
 #endif
 static void senior_setting_back_btn_up(lv_obj_t *obj)
 {
@@ -1139,6 +1170,7 @@ static void senior_setting_display(void)
 
 #ifdef STECH_VERSION
 	senior_unbind_tuya_set_btn_create(&module_p);
+	senior_md_push_notification_btn_create(&module_p);
 #endif
 	home_back_btn_create(senior_setting_back_btn_up, NULL);
 }

@@ -104,7 +104,7 @@ typedef struct
 {
 	int brightness;
 	bool enable;
-	bool model;
+	int model;
 	char ip[16];
 	char account[16];
 	char pwd[16];
@@ -117,6 +117,9 @@ typedef struct
 	door_info *outdoor2;
 	camera_info *cctv1;
 	camera_info *cctv2;
+	// 指向 user_data_info.camera_stream[]，0:主码流 1:子码流
+	const int *cctv1_stream;
+	const int *cctv2_stream;
 } moniotr_config;
 
 typedef struct
@@ -150,7 +153,8 @@ typedef struct
 
 void leo_api_init(void);
 
-void monitor_device_init(door_info *doo1, door_info *door2, camera_info *cctv1, camera_info *cctv2);
+void monitor_device_init(door_info *doo1, door_info *door2, camera_info *cctv1, camera_info *cctv2,
+	const int *cctv1_stream, const int *cctv2_stream);
 
 moniotr_config *monitor_config_get(void);
 

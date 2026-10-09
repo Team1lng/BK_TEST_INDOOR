@@ -12,6 +12,7 @@
 // #include "../../include/tuya/tuya_ipc_api.h"
 #include "tuya_sdk.h"
 #include "ak_tde.h"
+#include "../../layout/user_data.h"
 
 #define JPEG_WIDTH 1024
 #define JPEG_HEIGHT 600
@@ -217,7 +218,11 @@ static void *jpeg_record_task(void *arg)
 					}
 					else
 					{
-						tuya_notify_motion_event(0, stream.data, stream.len);
+						// 移动侦测推送开关：只有开启时才上报 DP 点触发手机推送
+						if (user_data_get()->other.md_push_notification)
+						{
+							tuya_notify_motion_event(0, stream.data, stream.len);
+						}
 						tuya_cloud_storage_start();
 					}
 				}
@@ -344,7 +349,11 @@ static void *sent_tuya_record_task(void *arg)
 			}
 			else
 			{
-				tuya_notify_motion_event(0, stream.data, stream.len);
+				// 移动侦测推送开关：只有开启时才上报 DP 点触发手机推送
+				if (user_data_get()->other.md_push_notification)
+				{
+					tuya_notify_motion_event(0, stream.data, stream.len);
+				}
 				tuya_cloud_storage_start();
 			}
 		}

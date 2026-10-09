@@ -95,7 +95,7 @@ typedef struct
     true,                   \
     false,                  \
     false,                  \
-    _FRENCH_STA,            \
+    false,            \
     false,                  \
     false,                  \
     false,                  \
@@ -252,6 +252,7 @@ enum btn_string_id
     STR_CAMERA_MODEL,
     STR_DAHUA,
     STR_HIKVISION,
+    STR_STECH,
     STR_CHANNEL_SWITCH,
     STR_MAIN_STREAM,
     STR_SUB_STREAM,
@@ -495,6 +496,7 @@ enum btn_string_id
 	STR_TUYA_UNBIND,
 	STR_UNBIND_HINT,
 	STR_PHONE_MONITORING,
+	STR_MD_PUSH_NOTIFICATION,
 	STR_TOTAL
 };
 // const char *multi_lingual[STR_TOTAL][LANGUAGE_TOTAL];

@@ -90,12 +90,15 @@ static bool outdoor_talk_diag_effective_busy[2];
 
 moniotr_config moniotr_conf = {NULL};
 
-void monitor_device_init(door_info *doo1, door_info *door2, camera_info *cctv1, camera_info *cctv2)
+void monitor_device_init(door_info *doo1, door_info *door2, camera_info *cctv1, camera_info *cctv2,
+	const int *cctv1_stream, const int *cctv2_stream)
 {
 	moniotr_conf.outdoor1 = doo1;
 	moniotr_conf.outdoor2 = door2;
 	moniotr_conf.cctv1 = cctv1;
 	moniotr_conf.cctv2 = cctv2;
+	moniotr_conf.cctv1_stream = cctv1_stream;
+	moniotr_conf.cctv2_stream = cctv2_stream;
 }
 
 moniotr_config *monitor_config_get(void)

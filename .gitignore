@@ -16,3 +16,26 @@ output/
 *.cache
 *.depend
 *.o
+
+# 日志文件
+*.log
+
+# CTest / CMake 测试产物
+Testing/
+
+# make.sh 编译输出（升级包与压缩包）
+SAT_ANYKAOS_*
+*.tar.gz
+
+# 根目录临时截图
+/33.png
+/44.png
+
+# 本地工作区缓存
+.workbuddy/
+
+# 一次性脚本（已不再使用）
+/fix_language_xls.py
+# 忽略OTA升级二进制产物
+upgrade/app/ANYKA37E.BIN
+upgrade/platform/app.sqsh4

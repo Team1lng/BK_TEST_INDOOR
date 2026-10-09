@@ -6,6 +6,9 @@ int main(void)
 {
 	assert(monitor_local_video_decode_required(false));
 	assert(!monitor_local_video_decode_required(true));
+	assert(!monitor_local_video_output_required(false, false));
+	assert(!monitor_local_video_output_required(true, false));
+	assert(monitor_local_video_output_required(false, true));
 	assert(monitor_background_clear_required(false));
 	assert(!monitor_background_clear_required(true));
 

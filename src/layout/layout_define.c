@@ -262,6 +262,7 @@ const char *multi_lingual[STR_TOTAL][LANGUAGE_TOTAL] =
 		{"Camera model", "摄像机型号", "Kamera modell", "דגם מצלמה", "Model aparatu", "Modelo de câmera", "Modelo de cámara", "Modèle caméra", "防犯カメラ機種", "Modello di fotocamera"},
 		{"Dahua", "大华", "Dahua", "Dahua", "Dahua", "Dahua", "Dahua", "Dahua", "Dahua社製", "Dahua"},
 		{"Hikvision", "海康", "Hikvision", "Hikvision", "Hikvision", "Hikvision", "Caminata", "Hikvision", "Hikvision社製", "Hikvision"},
+		{"Stech", "安士佳", "Stech", "Stech", "Stech", "Stech", "Stech", "Stech", "Stech社製", "Stech"},
 		{"Channel switch", "通道切换", "Kanalwechsel", "החלפת ערוץ", "Przełączanie kanału", "Alternância de canal", "Cambio de canal", "Changement de canal", "チャンネル切替", "Cambio canale", "Kanaal wisselen", "Prepínanie kanálov"},
 		{"Main stream", "主码流", "Hauptstream", "זרם ראשי", "Strumień główny", "Fluxo principal", "Flujo principal", "Flux principal", "メインストリーム", "Flusso principale"},
 		{"Sub stream", "子码流", "Substream", "זרם משני", "Strumień pomocniczy", "Fluxo secundário", "Flujo secundario", "Flux secondaire", "サブストリーム", "Flusso secondario"},
@@ -479,6 +480,10 @@ const char *multi_lingual[STR_TOTAL][LANGUAGE_TOTAL] =
 		{"light control", "灯控开关", "Lichtsteuerung", "שליטה על התאורה", "kontrola światła", "controlo da luz", "Control de luces", "Contrôle de la lumière", "ライトコントロール", "controllo della luce"},
 		{"System is busy", "系统繁忙", "Hier ist viel arbeit.", "המערכת עמוסה", "System jest zajęty", "O sistema está ocupado", "Sistema ocupado", "Le système est occupé", "システムがビジー", "Systém je zaneprázdněn"},
 		{"exit button", "出门按钮", "Knopf raus", "לחצן 'יציאה'", "Przycisk Exit", "Botão de saída", "Botón de salida", "Bouton de sortie", "終了ボタン", "Pulsanti di uscita"},
+
+		{"Unbind device", "解绑设备", "Von Tuya entfernen", "ניתק", "Usuń z Tuya", "Desvincular", "Desbloquear", "Annuler la liaison", "デバインドデバイス", "Sblocca", "Ontbinden", "Odstrániť z Tuya"},
+		{"Removal will prevent you from controlling the system from your phone.", "删除会使您无法通过手机控制系统。", "Als u het systeem verwijdert, kunt u het niet meer vanaf uw telefoon bedienen", "حذف سوف يمنعك من تمرير نظام التحكم في الهاتف", "Usunięcie uniemożliwi sterowanie systemem z telefonu", "A exclusão impede que você controle o sistema através do telefone", "La eliminación le impide controlar el sistema a través del teléfono", "La suppression vous empêche de contrôler le système via votre téléphone", "削除すると、携帯電話からシステムを制御できなくなります。", "La cancellazione rende impossibile passare attraverso il sistema di controllo del cellulare", "De verwijdering maakt het onmogelijk om het systeem te bedienen via uw telefoon.", "Jeho odstránením vám zabráni ovládať systém z telefónu"},
+		{"Phone monitoring...", "手机监控中...", "Telefonüberwachung...", "ניטור טלפון...", "monitoring z telefonu...", "monitoramento por celular...", "monitoreo desde teléfono...", "surveillance par téléphone...", "スマホ監視…", "monitoraggio da telefono...", "telefoonbewaking...", "monitorovanie z telefónu..."},
 
 };
 #endif
@@ -898,11 +903,11 @@ bool tuya_uuid_file_read(void)
 // 	back_logo_task_t = lv_task_create(back_logo_task, 3000, LV_TASK_PRIO_HIGH, NULL);
 // }
 
-// static void feed_watchdog_task(lv_task_t *t)
-// {
-// 	extern void watch_dog_feed(void);
-// 	watch_dog_feed();
-// }
+static void feed_watchdog_task(lv_task_t *t)
+{
+	extern void watch_dog_feed(void);
+	watch_dog_feed();
+}
 
 void leo_api_init(void)
 {
@@ -1037,8 +1042,8 @@ void leo_api_init(void)
 	// extern void SD_card_space_clear(void);
 	// SD_card_space_clear();
 	extern void watchdog_open(void);
-	// watchdog_open();
-	// lv_task_ready(lv_task_create(feed_watchdog_task, 1000, LV_TASK_PRIO_HIGHEST, NULL));
+	watchdog_open();
+	lv_task_ready(lv_task_create(feed_watchdog_task, 1000, LV_TASK_PRIO_HIGHEST, NULL));
 	monitor_channel_set(MON_CH_NONE);
 	goto_layout(pLAYOUT(standby));
 }
@@ -2117,8 +2122,14 @@ void dev_info_status_callback(unsigned long arg1, unsigned long arg2)
 
 bool goto_layout(const layout *layout)
 {
-	// extern unsigned long long os_get_ms(void);
-	// unsigned long long x = os_get_ms();
+	extern unsigned long long os_get_ms(void);
+	unsigned long long total_start_ms;
+	unsigned long long stage_start_ms;
+	unsigned long long prepare_cost_ms;
+	unsigned long long quit_cost_ms = 0;
+	unsigned long long clean_cost_ms;
+	unsigned long long enter_cost_ms;
+	const void *source_layout = cur_layout;
 
 	if ((layout == NULL) || (layout->enter == NULL))
 	{
@@ -2132,6 +2143,9 @@ bool goto_layout(const layout *layout)
 		msgbox_animat_create(text_str((layout == &layout_interphone || layout == &layout_call) ? STR_PHONE_MONITORING : STR_SYSYEM_BUSY), 1500);
 		return false;
 	}
+
+	total_start_ms = os_get_ms();
+	stage_start_ms = total_start_ms;
 
 	if (cur_layout == &layout_monitor &&
 		monitor_enter_way_get() == MONITOR_ENTER_TUYA &&
@@ -2148,16 +2162,16 @@ bool goto_layout(const layout *layout)
 
 	extern void gui_raw_clear(void);
 	gui_raw_clear();
+	prepare_cost_ms = os_get_ms() - stage_start_ms;
 
 	if ((cur_layout != NULL) && (cur_layout->quit != NULL))
 	{
-		// printf("%s ==============================>>>%d   %lld\n\r",__func__,__LINE__,os_get_ms() - x);
-		// x = os_get_ms();
+		stage_start_ms = os_get_ms();
 		cur_layout->quit((void *)layout);
-		// printf("%s ==============================>>>%d   %lld\n\r",__func__,__LINE__,os_get_ms() - x);
-		// x = os_get_ms();
+		quit_cost_ms = os_get_ms() - stage_start_ms;
 	}
 
+	stage_start_ms = os_get_ms();
 	lv_obj_clean(lv_scr_act());
 	device_id_repeat_msg_obj = NULL;
 
@@ -2167,18 +2181,24 @@ bool goto_layout(const layout *layout)
 
 	lv_area_t area = {0, 0, LV_HOR_RES_MAX, LV_VER_RES_MAX};
 	gui_draw_area_set(&area, 1);
+	clean_cost_ms = os_get_ms() - stage_start_ms;
 
 	if (cur_layout != layout)
 		prev_layout = cur_layout;
 
 	cur_layout = layout;
-	// system("echo 3 > /proc/sys/vm/drop_caches");
-	// system("sync");
-	// printf("%s ==============================>>>%d   %lld\n\r",__func__,__LINE__,os_get_ms() - x);
-	// x = os_get_ms();
+	stage_start_ms = os_get_ms();
 	layout->enter();
-	// printf("%s ==============================>>>%d   %lld\n\r",__func__,__LINE__,os_get_ms() - x);
-	// x = os_get_ms();
+	enter_cost_ms = os_get_ms() - stage_start_ms;
+
+	printf("[UI_PERF] layout switch from=%p to=%p prepare=%llums quit=%llums clean=%llums enter=%llums total=%llums\n",
+		   source_layout,
+		   layout,
+		   prepare_cost_ms,
+		   quit_cost_ms,
+		   clean_cost_ms,
+		   enter_cost_ms,
+		   os_get_ms() - total_start_ms);
 
 	return true;
 }

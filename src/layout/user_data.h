@@ -107,6 +107,7 @@ typedef struct
 	// char senser_records;
 	// char motion_records;
 	bool MD_preview;
+	bool md_push_notification; // MD Push notification 开关（移动侦测推送通知）
 	int language;
 	char unlock_time;
 	USER_WORK_PATTERN model;
@@ -231,6 +232,11 @@ typedef struct
 
 	user_net_pairing pairing_mode;
 	user_ip_allocation allocation_mode;
+
+	// 摄像头码流选择 0:主码流 1:子码流，[0]=camera1 [1]=camera2。
+	// 必须留在结构体末尾: user_data 是 {0} 初始化后整体 read() 进来的，追加在末尾
+	// 才能让旧 user_data.cfg 继续按原偏移读出，新字段落在 0(主码流)，无需升 APP_VERSION_V。
+	int camera_stream[2];
 } user_data_info;
 
 bool user_data_save(void);

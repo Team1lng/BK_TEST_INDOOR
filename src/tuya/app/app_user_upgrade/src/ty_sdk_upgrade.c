@@ -56,7 +56,43 @@ OPERATE_RET __IPC_APP_upgrade_notify_cb(IN CONST FW_UG_S *fw, IN CONST INT_T dow
         extern int ak_drv_wdt_close(void);
         ak_drv_wdt_close();
         system("cp /etc/config/wpa_supplicant.conf /app/data");
-        system("tar -zxvf /tmp/TWO_WIRE_APP -C /tmp;killall daemon.sh;killall app.sh;killall ANYKA37E.BIN;/tmp/update.sh &");
+
+        // 从 fw_url 解析版本标记名 SAT_ANYKAOS_xxxxxxxx 传给 update.sh，
+        // 使升级成功后 update.sh 能把版本号 touch 到 /app/data。
+        // update.sh 内写标记的动作被 `-n "$1"` 守卫，之前不带参数调用导致
+        // OTA 后 /app/data 版本文件不更新，进而 SD 卡升级判断错乱。
+        char ver_name[64] = {0};
+        char upgrade_cmd[256] = {0};
+        const char *ver_pos = strstr(fw->fw_url, "SAT_ANYKAOS_");
+        int idx = 0;
+
+        if (ver_pos != NULL)
+        {
+            for (; ver_pos[idx] != '\0' && idx < (int)sizeof(ver_name) - 1; idx++)
+            {
+                if (ver_pos[idx] == '_' ||
+                    (ver_pos[idx] >= '0' && ver_pos[idx] <= '9') ||
+                    (ver_pos[idx] >= 'A' && ver_pos[idx] <= 'Z'))
+                {
+                    ver_name[idx] = ver_pos[idx];
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+        ver_name[idx] = '\0';
+        if (idx == 0)
+        {
+            snprintf(ver_name, sizeof(ver_name), "SAT_ANYKAOS_UNKNOWN");
+        }
+        printf("OTA upgrade ver_name:%s\n\r", ver_name);
+
+        snprintf(upgrade_cmd, sizeof(upgrade_cmd),
+                 "tar -zxvf /tmp/TWO_WIRE_APP -C /tmp;killall daemon.sh;killall app.sh;killall ANYKA37E.BIN;/tmp/update.sh %s &",
+                 ver_name);
+        system(upgrade_cmd);
     }
     else // 门口机升级包，开始升级门口机
     {
