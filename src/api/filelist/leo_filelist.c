@@ -541,7 +541,11 @@ static bool scan_find_file(media_type type, const char *dir_path, media_info *p_
         /******************
         获取该文件所属类型
         *******************/
-        char *ptr = strrchr(buffer, '.');
+        char *ptr = strrchr(p_file, '.');
+        if (ptr == NULL)
+        {
+            goto fail_next;
+        }
         if ((type == FILE_TYPE_SD_MIXED_PHOTO) && (strcmp(ptr, PHOTO_DOT) == 0))
         {
             p_info->type = FILE_TYPE_SD_MIXED_PHOTO;

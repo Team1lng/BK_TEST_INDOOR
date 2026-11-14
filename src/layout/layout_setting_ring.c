@@ -1110,7 +1110,10 @@ static void ring_setting_display(void)
 
 static void setting_ring_sdcard_callback(unsigned long arg1, unsigned long arg2)
 {
-	if (arg2 == 0x00)
+	// arg2=0: 插卡成功且扫描完成，或拔卡
+	// arg2=1: 文件扫描完成信号（正常流程，与arg2=0等同处理）
+	// arg2=3: SD卡损坏/分区表错误/容量<100MB，需要格式化
+	if (arg2 == 0x00 || arg2 == 1)
 	{
 		if (sdcard_insert_msg_box == NULL)
 		{
@@ -1127,7 +1130,7 @@ static void setting_ring_sdcard_callback(unsigned long arg1, unsigned long arg2)
 			ring_ring_mode_set_btn_switch();
 		}
 	}
-	else
+	else if (arg2 == 3)
 	{
 		if (sdcard_insert_msg_box == NULL)
 		{
@@ -1139,6 +1142,7 @@ static void setting_ring_sdcard_callback(unsigned long arg1, unsigned long arg2)
 			lv_obj_align(sdcard_insert_msg_box->user_data, ((lv_obj_t *)sdcard_insert_msg_box->user_data)->user_data, LV_ALIGN_CENTER, 0, -30);
 		}
 	}
+	// arg2=2（格式化完成）暂不处理，沿用默认行为
 }
 
 static void LAYOUT_ENETER_FUNC(setting_ring)
