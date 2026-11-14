@@ -142,6 +142,7 @@ INT_T TUYA_IPC_p2p_event_cb(IN CONST INT_T device, IN CONST INT_T channel, IN CO
     switch (event)
     {
     case MEDIA_STREAM_LIVE_VIDEO_START:
+    case MEDIA_STREAM_STREAMING_VIDEO_START:
     {
         // PR_DEBUG("[TUYA_UI_TRACE] video start: clients before=%d", client_online_num);
         if (client_online_num++ > 0)
@@ -159,6 +160,7 @@ INT_T TUYA_IPC_p2p_event_cb(IN CONST INT_T device, IN CONST INT_T channel, IN CO
         break;
     }
     case MEDIA_STREAM_LIVE_VIDEO_STOP:
+    case MEDIA_STREAM_STREAMING_VIDEO_STOP:
     {
         // PR_DEBUG("[TUYA_UI_TRACE] video stop: clients before=%d", client_online_num);
         if (--client_online_num > 0)

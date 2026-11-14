@@ -310,9 +310,9 @@ int tuya_realtime_video_put_frame(unsigned char *data, int size, unsigned long l
     {
         frame_type = tuya_h264_frame_type_get(data, size);
         main_start_ms = os_get_ms();
-        main_ret = tuya_ipc_ring_buffer_append_data(s_ring_buffer_handles[E_IPC_STREAM_VIDEO_MAIN], data, size, frame_type, pts);
+        main_ret = tuya_ipc_ring_buffer_append_data(s_ring_buffer_handles[E_IPC_STREAM_VIDEO_MAIN], data, size, frame_type, pts * 1000);
         sub_start_ms = os_get_ms();
-        sub_ret = tuya_ipc_ring_buffer_append_data(s_ring_buffer_handles[E_IPC_STREAM_VIDEO_SUB], data, size, frame_type, pts);
+        sub_ret = tuya_ipc_ring_buffer_append_data(s_ring_buffer_handles[E_IPC_STREAM_VIDEO_SUB], data, size, frame_type, pts * 1000);
         now_ms = os_get_ms();
         video_perf_stats_record(&tuya_main_ring_perf_stats, size, sub_start_ms - main_start_ms,
                                 main_ret, false, 0, 15);
@@ -363,7 +363,7 @@ int tuya_realtime_audio_put_frame(unsigned char *data, int size, unsigned long l
 {
     if (s_ring_buffer_handles[E_IPC_STREAM_AUDIO_MAIN])
     {
-        tuya_ipc_ring_buffer_append_data(s_ring_buffer_handles[E_IPC_STREAM_AUDIO_MAIN], data, size, E_AUDIO_FRAME, pts);
+        tuya_ipc_ring_buffer_append_data(s_ring_buffer_handles[E_IPC_STREAM_AUDIO_MAIN], data, size, E_AUDIO_FRAME, pts * 1000);
         return 0;
     }
     return -1;
